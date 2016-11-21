@@ -1,4 +1,4 @@
-module Ordeal exposing
+port module Ordeal exposing
   ( Test
   , run
   , describe
@@ -169,7 +169,7 @@ update msg model =
       update (Run model.queue) { model | results = Dict.insert id result model.results }
 
     Done ->
-      let aze = Debug.log "Report" (reportToString "" <| generateReport model.results model.report) in (model, Cmd.none)
+      (model, done <| reportToString "" <| generateReport model.results model.report)
 
 subscriptions: Model -> Sub Msg
 subscriptions model =
@@ -226,3 +226,5 @@ reportToString padding report =
 
     ReportSuite name results ->
       (padding ++ name) :: ( List.concatMap (reportToString (padding ++ "  ")) results )
+
+port done: List String -> Cmd msg
