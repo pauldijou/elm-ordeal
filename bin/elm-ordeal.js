@@ -66,9 +66,10 @@ createTmpFile()
   .then(getOutputPath)
   .then(compileTests)
   .then(executeJasmine)
-  .then(startKarma)
+  // .then(startKarma)
   .then(function (ctx) {
-    process.exit(ctx.jasmine && ctx.karma ? 0 : 1)
+    process.exit(0)
+    // process.exit(ctx.jasmine && ctx.karma ? 0 : 1)
   })
   .catch(function (e) {
     console.error(e)
@@ -87,7 +88,8 @@ function createTmpFile() {
 }
 
 function getOutputPath(info) {
-  return path.relative(process.cwd(), info.path)
+  return info.path
+  // return path.relative(process.cwd(), info.path)
 }
 
 function compileTests(outputPath) {
@@ -109,16 +111,18 @@ function compileTests(outputPath) {
 function executeJasmine(ctx) {
   if (!args.node) { ctx.jasmine = true; return ctx }
 
-  global.ordeal.runner = require(path.join(moduleRoot, 'build', 'runner.js')).Runner.worker()
+  // global.ordeal.runner = require(path.join(moduleRoot, 'build', 'runner.js')).Runner.worker()
 
   return new Promise(function (resolve, reject) {
-    jasmine.onComplete(function(passed) {
-      ctx.jasmine = passed
-      resolve(ctx)
-    })
-    jasmine.env.clearReporters()
-    jasmine.addReporter(new SpecReporter())
-    jasmine.execute([ ctx.output ])
+    // jasmine.onComplete(function(passed) {
+    //   ctx.jasmine = passed
+    //   resolve(ctx)
+    // })
+    // jasmine.env.clearReporters()
+    // jasmine.addReporter(new SpecReporter())
+    // jasmine.execute([ ctx.output ])
+    console.log('RUN TESTS')
+    require(ctx.output).Test.worker()
   })
 }
 

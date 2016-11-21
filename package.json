@@ -5,7 +5,7 @@
   "repository": "https://github.com/pauldijou/elm-ordeal.git",
   "scripts": {
     "build": "elm-make src/Runner.elm --output=build/runner.js",
-    "test": "npm run build && ./bin/elm-ordeal.js test/Test.elm --node --chrome"
+    "test": "./bin/elm-ordeal.js test/Test.elm --node"
   },
   "dependencies": {
     "cross-spawn": "^5.0.1",

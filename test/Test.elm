@@ -3,28 +3,27 @@ module Test exposing (..)
 import Task
 import Ordeal exposing (..)
 
-andThen = flip Task.andThen
+main = run all
 
 all: Test
 all =
-  describe "My first suite" <| \() ->
-    [ test "My very first test" <| \() ->
-      expect "a"
-      |> toBe "a"
-    , describe "A sub-suite" <| \() ->
-      [ test "And a sub-test" <| \() ->
-        { a = 1, b = False }
-        |> isExpected
-        |> toEqual { a = 1, b = False }
-      ]
-    , testTask "My first async test" (
-      Task.succeed 42
-      |> andTest (\value -> expect value |> toBe 42)
-      |> Task.map toString
-      |> andTest (\value -> expect value |> toBe "42")
+  describe "My first suite"
+    [ test "My very first test" (
+      "a"
+      |> shouldEqual "a"
     )
-    , testTask "My first failure" (
+    , describe "A sub-suite"
+      [ test "And a sub-test" (
+        { a = 1, b = False }
+        |> shouldEqual { a = 1, b = False }
+      )
+      ]
+    , test "My first async test" (
+      Task.succeed 42
+      |> andTest (\value -> value |> shouldEqual 42)
+    )
+    , test "My first failure" (
       Task.fail { a = 1, b = "aze" }
-      |> andTest (\value -> expect value |> toBe "54")
+      |> andTest (\value -> value |> shouldEqual "54")
     )
     ]
