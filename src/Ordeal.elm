@@ -35,9 +35,6 @@ import Html.App
 andThen: (a -> Task x b) -> Task x a -> Task x b
 andThen = flip Task.andThen
 
-onError: (x -> Task y a) -> Task x a -> Task y a
-onError = flip Task.onError
-
 {-| A `Test` is something
 -}
 type Test
