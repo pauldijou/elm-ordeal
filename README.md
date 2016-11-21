@@ -11,12 +11,15 @@ elm-package install pauldijou/elm-ordeal
 ## Writing your first tests
 
 ```elm
-module Test exposing (..)
+port module Test exposing (..)
 
 import Task
 import Ordeal exposing (..)
 
-main = run all
+main: OrdealProgram
+main = run emit all
+
+port emit : Event -> Cmd msg
 
 all: Test
 all =
@@ -36,16 +39,15 @@ all =
       "a" |> shouldEqual "b"
     )
     , test "My first async test" (
-      Task.succeed 42 |> andTest (\value -> value |> shouldEqual 42)
+      Task.succeed 42 |> andTest (\value -> value |> shouldBeGreaterThan 35)
     )
     , test "My first failure" (
       Task.fail { a = 1, b = "aze" } |> andTest (\value -> value |> shouldEqual "54")
     )
     , test "Another failure" (
-      "a" |> shouldEqual "b"
+      ["a","b","c"] |> shouldContain "d"
     )
     ]
-
 ```
 
 ## Running tests

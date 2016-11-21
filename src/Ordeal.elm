@@ -1,5 +1,7 @@
-port module Ordeal exposing
+module Ordeal exposing
   ( Test
+  , Event
+  , OrdealProgram
   , run
   , describe
   , xdescribe
@@ -8,29 +10,33 @@ port module Ordeal exposing
   , andTest
   , shouldEqual
   , shouldNotEqual
-  -- , toMatch
-  -- , toBeDefined
-  -- , toContain
-  -- , toBeLessThan
-  -- , toBeGreaterThan
+  , shouldMatch
+  , shouldNotMatch
+  , shouldBeDefined
+  , shouldNotBeDefined
+  , shouldContain
+  , shouldNotContain
+  , shouldBeLessThan
+  , shouldBeGreaterThan
   )
 
 {-| An `Ordeal` is a trial to see if your code is good enough to reach the production heaven or not.
 
 # Type and Constructors
-@docs Test
+@docs Test, Event, OrdealProgram
 
 # Writing suites
 @docs run, describe, xdescribe, test, xtest, andTest
 
 # Writing expectations
-@docs shouldEqual, shouldNotEqual
+@docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeDefined, shouldNotBeDefined, shouldContain, shouldNotContain, shouldBeLessThan, shouldBeGreaterThan
 -}
 
 import String
 import Time exposing (Time)
 import Task exposing (Task)
--- import Regex exposing (Regex)
+import Regex exposing (Regex)
+import Json.Encode
 import Html exposing (Html)
 import Html.App
 
@@ -51,7 +57,7 @@ type TestResult
 
 type alias Expectation = Task String TestResult
 
-type Operator = Equal | NotEqual
+type Operator = Equal | Match | Contain | Less | Greater
 
 {-|-}
 describe: String -> List Test -> Test
@@ -85,19 +91,28 @@ andTest spec task =
 
 -- Matchers
 
-operatorToString: Operator -> a -> b -> String
-operatorToString op source target =
+operatorToString: Operator -> Bool -> a -> b -> String
+operatorToString op no actual expected =
   case op of
-    Equal -> "Expected " ++ (toString source) ++ " to equal " ++ (toString target)
-    NotEqual -> "Expected " ++ (toString source) ++ " not to equal " ++ (toString target)
+    Equal -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to equal " ++ (toString expected)
+    Match -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to match " ++ (toString expected)
+    Contain -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to contain " ++ (toString expected)
+    Less -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to be less than " ++ (toString expected)
+    Greater -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to be greater than " ++ (toString expected)
+
+internalCompare: (Bool -> Bool) -> Operator -> (a -> b -> Bool) -> b -> a -> Expectation
+internalCompare inverse op predicate expected actual =
+  Task.succeed (
+    if inverse <| predicate actual expected
+    then Success
+    else Failure (operatorToString op (inverse False) actual expected)
+  )
 
 compare: Operator -> (a -> b -> Bool) -> b -> a -> Expectation
-compare op spec target source =
-  Task.succeed (
-    if spec source target
-    then Success
-    else Failure (operatorToString op source target)
-  )
+compare = internalCompare identity
+
+compareNot: Operator -> (a -> b -> Bool) -> b -> a -> Expectation
+compareNot = internalCompare not
 
 {-|-}
 shouldEqual: a -> a -> Expectation
@@ -105,30 +120,45 @@ shouldEqual = compare Equal (==)
 
 {-|-}
 shouldNotEqual: a -> a -> Expectation
-shouldNotEqual = compare Equal (/=)
+shouldNotEqual = compareNot Equal (==)
 
--- {-|-}
--- toMatch: Regex -> BuildingExpectation String -> Expectation
--- toMatch = Native.Ordeal.toMatch
---
--- {-|-}
--- toBeDefined: Maybe a -> BuildingExpectation (Maybe a) -> Expectation
--- toBeDefined = Native.Ordeal.toBeDefined
---
--- {-|-}
--- toContain: List a -> BuildingExpectation (List a) -> Expectation
--- toContain = Native.Ordeal.toContain
---
--- {-|-}
--- toBeLessThan: number -> BuildingExpectation number -> Expectation
--- toBeLessThan = Native.Ordeal.toBeLessThan
---
--- {-|-}
--- toBeGreaterThan: number -> BuildingExpectation number -> Expectation
--- toBeGreaterThan = Native.Ordeal.toBeGreaterThan
+{-|-}
+shouldMatch: Regex -> String -> Expectation
+shouldMatch = compare Match (flip Regex.contains)
+
+{-|-}
+shouldNotMatch: Regex -> String -> Expectation
+shouldNotMatch = compareNot Match (flip Regex.contains)
+
+{-|-}
+shouldBeDefined: Maybe a -> Expectation
+shouldBeDefined = shouldNotEqual Nothing
+
+{-|-}
+shouldNotBeDefined: Maybe a -> Expectation
+shouldNotBeDefined = shouldEqual Nothing
+
+{-|-}
+shouldContain: a -> List a -> Expectation
+shouldContain = compare Contain (flip List.member)
+
+{-|-}
+shouldNotContain: a -> List a -> Expectation
+shouldNotContain = compareNot Contain (flip List.member)
+
+{-|-}
+shouldBeLessThan: comparable -> comparable -> Expectation
+shouldBeLessThan = compare Less (<)
+
+{-|-}
+shouldBeGreaterThan: comparable -> comparable -> Expectation
+shouldBeGreaterThan = compare Greater (>)
 
 
 -- Runner
+
+{-|-}
+type alias OrdealProgram = Program Settings
 
 type alias TestId = Int
 
@@ -187,44 +217,48 @@ type alias EndReport =
   }
 
 {-|-}
-run: Test -> Program Settings
-run test =
+run: EventEmitter Msg -> Test -> Program Settings
+run emitter test =
   Html.App.programWithFlags
-    { init = init test
-    , update = update
+    { init = init emitter test
+    , update = update emitter
     , subscriptions = subscriptions
     , view = view
     }
 
-init: Test -> Settings -> (Model, Cmd Msg)
-init spec settings =
+init: EventEmitter Msg -> Test -> Settings -> (Model, Cmd Msg)
+init emitter spec settings =
   let
     (id, report, queue) = initReport 0 spec
-    (md, fx) = update (Run queue) { timeout = settings.timeout, queue = queue, report = report }
+    model =
+      { timeout = settings.timeout
+      , queue = queue
+      , report = report
+      }
   in
-    md ! [ started <| makeStartReport md.report, fx ]
+    model ! [ started emitter <| makeStartReport model.report, message <| Run queue ]
 
 message: Msg -> Cmd Msg
 message msg =
   Task.perform (always msg) (always msg) (Task.succeed ())
 
-update: Msg -> Model -> (Model, Cmd Msg)
-update msg model =
+update: EventEmitter Msg -> Msg -> Model -> (Model, Cmd Msg)
+update emitter msg model =
   case msg of
     Run queue -> case queue of
-      [] -> update Done model
+      [] -> (model, message Done)
       next :: rest ->
         let
           updatedModel = { model | queue = rest }
         in
           case next of
             SuiteStart name ->
-              updatedModel ! [ suiteStarted name, message <| Run updatedModel.queue ]
+              updatedModel ! [ suiteStarted emitter name, message <| Run updatedModel.queue ]
             SuiteDone name ->
-              updatedModel ! [ suiteDone name, message <| Run updatedModel.queue ]
+              updatedModel ! [ suiteDone emitter name, message <| Run updatedModel.queue ]
             TestRun nextTest ->
               updatedModel ! [
-                testStarted nextTest.name,
+                testStarted emitter nextTest.name,
                 Task.perform
                   (\(err, start, end) -> RunnedTest nextTest (Failure err, start, end))
                   (RunnedTest nextTest)
@@ -251,10 +285,10 @@ update msg model =
           Timeout -> { testedTemplate | timeout = True }
           Skipped -> { testedTemplate | skipped = True }
       in
-        { model | report = updateReport value.id tested model.report } ! [ testDone tested, message <| Run model.queue]
+        { model | report = updateReport value.id tested model.report } ! [ testDone emitter tested, message <| Run model.queue]
 
     Done ->
-      (model, done <| makeEndReport model.report)
+      (model, done emitter <| makeEndReport model.report)
 
 subscriptions: Model -> Sub Msg
 subscriptions model =
@@ -360,14 +394,69 @@ extratSubsets report =
         emptySubset
         reports
 
-port started: StartReport -> Cmd msg
 
-port suiteStarted: String -> Cmd msg
 
-port testStarted: String -> Cmd msg
+-- Events
 
-port testDone: Tested -> Cmd msg
+type alias EventEmitter msg = Event -> Cmd msg
 
-port suiteDone: String -> Cmd msg
+{-|-}
+type alias Event =
+  { target: String
+  , atStart: Bool
+  , value: Json.Encode.Value
+  }
 
-port done: EndReport -> Cmd msg
+started: EventEmitter Msg -> StartReport -> Cmd Msg
+started emit value =
+  emit { target = "", atStart = True, value = encodeStartReport value  }
+
+suiteStarted: EventEmitter Msg -> String -> Cmd Msg
+suiteStarted emit value =
+  emit { target = "suite", atStart = True, value = Json.Encode.string value}
+
+testStarted: EventEmitter Msg -> String -> Cmd Msg
+testStarted emit value =
+  emit { target = "test", atStart = True, value = Json.Encode.string value }
+
+testDone: EventEmitter Msg -> Tested -> Cmd Msg
+testDone emit value =
+  emit { target = "test", atStart = False, value = encodeTested value }
+
+suiteDone: EventEmitter Msg -> String -> Cmd Msg
+suiteDone emit value =
+  emit { target = "suite", atStart = False, value = Json.Encode.string value }
+
+done: EventEmitter Msg -> EndReport -> Cmd Msg
+done emit value =
+  emit { target = "", atStart = False, value = encodeEndReport value }
+
+
+encodeTested: Tested -> Json.Encode.Value
+encodeTested tested =
+  Json.Encode.object
+    [ ("name", Json.Encode.string tested.name)
+    , ("suites", Json.Encode.list <| List.map Json.Encode.string tested.suites)
+    , ("success", Json.Encode.bool tested.success)
+    , ("timeout", Json.Encode.bool tested.timeout)
+    , ("skipped", Json.Encode.bool tested.skipped)
+    , ("failure", Json.Encode.string tested.failure)
+    , ("start", Json.Encode.float tested.start)
+    , ("end", Json.Encode.float tested.end)
+    , ("duration", Json.Encode.float tested.duration)
+    ]
+
+encodeStartReport: StartReport -> Json.Encode.Value
+encodeStartReport report =
+  Json.Encode.object
+    [ ("suites", Json.Encode.int report.suites)
+    , ("tests", Json.Encode.int report.tests)
+    ]
+
+encodeEndReport: EndReport -> Json.Encode.Value
+encodeEndReport report =
+  Json.Encode.object
+    [ ("failures", Json.Encode.list <| List.map encodeTested report.failures)
+    , ("skipped", Json.Encode.list <| List.map encodeTested report.skipped)
+    , ("timeouts", Json.Encode.list <| List.map encodeTested report.timeouts)
+    ]
