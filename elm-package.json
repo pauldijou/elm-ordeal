@@ -1,7 +1,7 @@
 {
-    "version": "0.0.1",
+    "version": "0.0.2",
     "repository": "https://github.com/pauldijou/elm-ordeal.git",
-    "summary": "Run tests like a boss",
+    "summary": "Write tests like a boss",
     "license": "Apache-2.0",
     "source-directories": [
         "src"

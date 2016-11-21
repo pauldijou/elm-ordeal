@@ -1,22 +1,11 @@
 # elm-ordeal
 
-> Test your Elm code inside Node or any major browser. Support async Task out of the box
+> Write unit tests in Elm, support async Task out of the box
 
-## Proof of concept
-
-This project is currently no more than a **proof-of-concept**, it's not published in the NPM nor Elm registry. But, if you have Chrome, you can see it in action by doing:
+## Install
 
 ```bash
-git clone https://github.com/pauldijou/elm-ordeal
-git clone https://github.com/pauldijou/elm-ordeal-cli
-cd elm-ordeal-cli
-
-# NPM users
-npm install
-npm test
-# Yarn users
-yarn install
-yarn test
+elm-package install pauldijou/elm-ordeal
 ```
 
 ## Writing your first tests
@@ -33,40 +22,41 @@ all: Test
 all =
   describe "My first suite"
     [ test "My very first test" (
-      "a"
-      |> shouldEqual "a"
+      "a" |> shouldEqual "a"
     )
     , describe "A sub-suite"
       [ test "And a sub-test" (
-        { a = 1, b = False }
-        |> shouldEqual { a = 1, b = False }
+        { a = 1, b = False } |> shouldEqual { a = 1, b = False }
+      )
+      , test "Another sub-test" (
+        True |> shouldNotEqual False
       )
       ]
+    , xtest "A skipped test" (
+      "a" |> shouldEqual "b"
+    )
     , test "My first async test" (
-      Task.succeed 42
-      |> andTest (\value -> value |> shouldEqual 42)
+      Task.succeed 42 |> andTest (\value -> value |> shouldEqual 42)
     )
     , test "My first failure" (
-      Task.fail { a = 1, b = "aze" }
-      |> andTest (\value -> value |> shouldEqual "54")
+      Task.fail { a = 1, b = "aze" } |> andTest (\value -> value |> shouldEqual "54")
+    )
+    , test "Another failure" (
+      "a" |> shouldEqual "b"
     )
     ]
+
 ```
 
-## Envs
+## Running tests
 
-You can run your tests on the following environments, just specify the correct CLI argument when running `elm-ordeal`. Don't forget it's up to you to locally install any browser you want to use.
+Consider using [elm-ordeal-cli](https://github.com/pauldijou/elm-ordeal-cli)
 
-- Node (`--node`)
-- Chrome (`--chrome`)
-- Firefox (`--firefox`)
-- Safari (`--safari`)
-- Edge / Internet Explorer (`--ie`)
-- Opera (`--opera`)
 
-## Thanks
-
-A big thank to [@rtfeldman](https://github.com/gaearon) for creating [node-test-runner](https://github.com/rtfeldman/node-test-runner) which I took a lot of inspiration from.
+```bash
+npm install elm-ordeal-cli
+elm-ordeal-cli your/TestFile.elm --node
+```
 
 ## License
 

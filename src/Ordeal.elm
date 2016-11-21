@@ -2,7 +2,9 @@ port module Ordeal exposing
   ( Test
   , run
   , describe
+  , xdescribe
   , test
+  , xtest
   , andTest
   , shouldEqual
   , shouldNotEqual
@@ -19,14 +21,14 @@ port module Ordeal exposing
 @docs Test
 
 # Writing suites
-@docs run, describe, test, andTest
+@docs run, describe, xdescribe, test, xtest, andTest
 
 # Writing expectations
 @docs shouldEqual, shouldNotEqual
 -}
 
 import String
-import Dict exposing (Dict)
+import Time exposing (Time)
 import Task exposing (Task)
 -- import Regex exposing (Regex)
 import Html exposing (Html)
@@ -43,6 +45,8 @@ type Test
 
 type TestResult
   = Success
+  | Skipped
+  | Timeout
   | Failure String
 
 type alias Expectation = Task String TestResult
@@ -54,8 +58,22 @@ describe: String -> List Test -> Test
 describe = Suite
 
 {-|-}
+xdescribe: String -> List Test -> Test
+xdescribe name = skip << Suite name
+
+{-|-}
 test: String -> Expectation -> Test
 test = Test
+
+{-|-}
+xtest: String -> Expectation -> Test
+xtest name = skip << Test name
+
+skip: Test -> Test
+skip test =
+  case test of
+    Suite name tests -> Suite name (List.map skip tests)
+    Test name expectation -> Test name (Task.succeed Skipped)
 
 {-|-}
 andTest: (a -> Expectation) -> Task e a -> Expectation
@@ -114,43 +132,81 @@ shouldNotEqual = compare Equal (/=)
 
 type alias TestId = Int
 
-type alias Queue = List { id: TestId, expectation: Expectation }
+type QueueValue
+  = SuiteStart String
+  | SuiteDone String
+  | TestRun QueueTest
 
-type ReportStructure
-  = ReportStructureSuite String (List ReportStructure)
-  | ReportStructureTest String TestId
+type alias QueueTest =
+   { id: TestId
+   , name: String
+   , expectation: Expectation
+    }
+
+type alias Queue = List QueueValue
 
 type Report
   = ReportSuite String (List Report)
-  | ReportTest String TestResult
+  | ReportTest { id: TestId, result: Maybe Tested }
 
-type alias Model = {
-  results: Dict TestId TestResult,
-  queue: Queue,
-  report: ReportStructure
-}
+type alias Model =
+  { timeout: Float
+  , queue: Queue
+  , report: Report
+  }
+
+type alias Tested =
+  { name: String
+  , suites: List String
+  , success: Bool
+  , timeout: Bool
+  , skipped: Bool
+  , failure: String
+  , start: Time
+  , end: Time
+  , duration: Float
+  }
 
 type Msg
   = Run Queue
-  | Runned TestId TestResult
+  | RunnedTest QueueTest (TestResult, Time, Time)
   | Done
 
+type alias Settings =
+  { timeout: Float }
+
+type alias StartReport =
+  { suites: Int
+  , tests: Int
+  }
+
+type alias EndReport =
+  { failures: List Tested
+  , skipped: List Tested
+  , timeouts: List Tested
+  }
+
 {-|-}
-run: Test -> Program Never
+run: Test -> Program Settings
 run test =
-  Html.App.program
+  Html.App.programWithFlags
     { init = init test
     , update = update
     , subscriptions = subscriptions
     , view = view
     }
 
-init: Test -> (Model, Cmd Msg)
-init spec =
+init: Test -> Settings -> (Model, Cmd Msg)
+init spec settings =
   let
-    (id, report, queue) = parseTest 0 spec
+    (id, report, queue) = initReport 0 spec
+    (md, fx) = update (Run queue) { timeout = settings.timeout, queue = queue, report = report }
   in
-    update (Run queue) { results = Dict.empty, queue = queue, report = report }
+    md ! [ started <| makeStartReport md.report, fx ]
+
+message: Msg -> Cmd Msg
+message msg =
+  Task.perform (always msg) (always msg) (Task.succeed ())
 
 update: Msg -> Model -> (Model, Cmd Msg)
 update msg model =
@@ -158,18 +214,47 @@ update msg model =
     Run queue -> case queue of
       [] -> update Done model
       next :: rest ->
-        { model | queue = rest } ! [
-          Task.perform
-            (\err -> Runned next.id <| Failure err)
-            (Runned next.id)
-            next.expectation
-        ]
+        let
+          updatedModel = { model | queue = rest }
+        in
+          case next of
+            SuiteStart name ->
+              updatedModel ! [ suiteStarted name, message <| Run updatedModel.queue ]
+            SuiteDone name ->
+              updatedModel ! [ suiteDone name, message <| Run updatedModel.queue ]
+            TestRun nextTest ->
+              updatedModel ! [
+                testStarted nextTest.name,
+                Task.perform
+                  (\(err, start, end) -> RunnedTest nextTest (Failure err, start, end))
+                  (RunnedTest nextTest)
+                  (wrap nextTest.expectation)
+              ]
 
-    Runned id result ->
-      update (Run model.queue) { model | results = Dict.insert id result model.results }
+    RunnedTest value (result, start, end) ->
+      let
+        testedTemplate =
+          { name = value.name
+          , suites = []
+          , success = False
+          , timeout = False
+          , skipped = False
+          , failure = ""
+          , start = start
+          , end = end
+          , duration = end - start
+          }
+
+        tested = case result of
+          Success -> { testedTemplate | success = True }
+          Failure err -> { testedTemplate | success = False, failure = err }
+          Timeout -> { testedTemplate | timeout = True }
+          Skipped -> { testedTemplate | skipped = True }
+      in
+        { model | report = updateReport value.id tested model.report } ! [ testDone tested, message <| Run model.queue]
 
     Done ->
-      (model, done <| reportToString "" <| generateReport model.results model.report)
+      (model, done <| makeEndReport model.report)
 
 subscriptions: Model -> Sub Msg
 subscriptions model =
@@ -179,52 +264,110 @@ view: Model -> Html Msg
 view model =
   Html.text ""
 
-parseTest: TestId -> Test -> (TestId, ReportStructure, Queue)
-parseTest lastId spec =
+onError = flip Task.onError
+
+wrap: Expectation -> Task (String, Time, Time) (TestResult, Time, Time)
+wrap expectation =
+  Time.now
+  |> andThen (\start ->
+    expectation
+    |> Task.map (\res -> (res, start))
+    |> Task.mapError (\err -> (err, start))
+  )
+  |> andThen (\(result, start) ->
+    Time.now
+    |> Task.map (\end -> (result, start, end))
+  )
+  |> onError (\(result, start) ->
+    Time.now
+    |> andThen (\end -> Task.fail (result, start, end))
+  )
+
+initReport: TestId -> Test -> (TestId, Report, Queue)
+initReport lastId spec =
   case spec of
     Test name expectation ->
       let
         id = lastId + 1
       in
-        (id, ReportStructureTest name id, [ { id = id, expectation = expectation } ])
+        (id, ReportTest { id = id, result = Nothing }, [ TestRun { id = id, name = name, expectation = expectation } ])
     Suite name tests ->
       let
         (nextId, structure, queue) =
           List.foldl
             (\value (id, struc, que) ->
               let
-                (i, s, q) = parseTest id value
+                (i, s, q) = initReport id value
               in
-                (i, s :: struc, q ++ que)
+                (i, s :: struc, que ++ q)
             )
-            (lastId, [], [])
+            (lastId, [], [ SuiteStart name ])
             tests
       in
-        (nextId, ReportStructureSuite name structure, queue)
+        (nextId, ReportSuite name (List.reverse structure), queue ++ [ SuiteDone name ])
 
-
-generateReport: Dict TestId TestResult -> ReportStructure -> Report
-generateReport results structure =
-  case structure of
-    ReportStructureTest name id -> case Dict.get id results of
-      Nothing -> ReportTest name (Failure "We lost the test...")
-      Just result -> ReportTest name result
-
-    ReportStructureSuite name reports ->
-      ReportSuite name (
-        List.map
-          (generateReport results)
-          reports
-      )
-
-reportToString: String -> Report -> List String
-reportToString padding report =
+updateReport: TestId -> Tested -> Report -> Report
+updateReport id tested report =
   case report of
-    ReportTest name result -> case result of
-      Success -> [ padding ++ " Ok: " ++ name ]
-      Failure err -> [ padding ++ " Ko: " ++ name ++ " | " ++ err ]
+    ReportSuite name tests -> ReportSuite name (List.map (updateReport id tested) tests)
+    ReportTest params ->
+      if params.id == id
+      then ReportTest { params | result = Just tested }
+      else ReportTest params
 
-    ReportSuite name results ->
-      (padding ++ name) :: ( List.concatMap (reportToString (padding ++ "  ")) results )
 
-port done: List String -> Cmd msg
+makeStartReport: Report -> StartReport
+makeStartReport report =
+  case report of
+    ReportTest _ -> { suites = 0, tests = 1 }
+    ReportSuite name tests ->
+      List.foldl
+        (\value acc ->
+          let { suites, tests } = makeStartReport value
+          in { suites = acc.suites + suites, tests = acc.tests + tests }
+        )
+        { suites = 1, tests = 0 }
+        tests
+
+makeEndReport: Report -> EndReport
+makeEndReport report =
+  extratSubsets report
+
+emptySubset: { failures: List Tested, skipped: List Tested, timeouts: List Tested }
+emptySubset =
+  { failures = [], skipped = [], timeouts = [] }
+
+extratSubsets: Report -> { failures: List Tested, skipped: List Tested, timeouts: List Tested }
+extratSubsets report =
+  case report of
+    ReportTest { id, result } -> case result of
+      Nothing -> emptySubset
+      Just r ->
+        if r.skipped
+        then { emptySubset | skipped = [ r ] }
+        else if r.timeout
+        then { emptySubset | timeouts = [ r ] }
+        else if (not r.success)
+        then { emptySubset | failures = [ r ] }
+        else emptySubset
+
+    ReportSuite name reports ->
+      List.foldl
+        (\r acc ->
+          let { failures, skipped, timeouts } = extratSubsets r
+          in { failures = acc.failures ++ failures, skipped = acc.skipped ++ skipped, timeouts = acc.timeouts ++ timeouts }
+        )
+        emptySubset
+        reports
+
+port started: StartReport -> Cmd msg
+
+port suiteStarted: String -> Cmd msg
+
+port testStarted: String -> Cmd msg
+
+port testDone: Tested -> Cmd msg
+
+port suiteDone: String -> Cmd msg
+
+port done: EndReport -> Cmd msg
