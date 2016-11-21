@@ -8,7 +8,8 @@ This project is currently no more than a **proof-of-concept**, it's not publishe
 
 ```bash
 git clone https://github.com/pauldijou/elm-ordeal
-cd elm-ordeal
+git clone https://github.com/pauldijou/elm-ordeal-cli
+cd elm-ordeal-cli
 
 # NPM users
 npm install
@@ -16,17 +17,6 @@ npm test
 # Yarn users
 yarn install
 yarn test
-```
-
-## Getting started (when actually published)
-
-```bash
-# Install
-yarn install elm-ordeal
-# Run
-elm-ordeal your/TestFile.elm
-# Learn
-elm-ordeal --help
 ```
 
 ## Writing your first tests
@@ -37,27 +27,28 @@ module Test exposing (..)
 import Task
 import Ordeal exposing (..)
 
+main = run all
+
 all: Test
 all =
-  describe "My first suite" <| \() ->
-    [ test "My very first test" <| \() ->
-      expect "a"
-      |> toBe "a"
-    , describe "A sub-suite" <| \() ->
-      [ test "And a sub-test" <| \() ->
-        { a = 1, b = False }
-        |> isExpected
-        |> toEqual { a = 1, b = False }
-      ]
-    , testTask "My first async test" (
-      Task.succeed 42
-      |> andTest (\value -> expect value |> toBe 42)
-      |> Task.map toString
-      |> andTest (\value -> expect value |> toBe "42")
+  describe "My first suite"
+    [ test "My very first test" (
+      "a"
+      |> shouldEqual "a"
     )
-    , testTask "My first failure" (
+    , describe "A sub-suite"
+      [ test "And a sub-test" (
+        { a = 1, b = False }
+        |> shouldEqual { a = 1, b = False }
+      )
+      ]
+    , test "My first async test" (
+      Task.succeed 42
+      |> andTest (\value -> value |> shouldEqual 42)
+    )
+    , test "My first failure" (
       Task.fail { a = 1, b = "aze" }
-      |> andTest (\value -> expect value |> toBe "54")
+      |> andTest (\value -> value |> shouldEqual "54")
     )
     ]
 ```
