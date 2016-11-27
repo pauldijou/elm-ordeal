@@ -25,23 +25,20 @@ module Ordeal exposing
 # Type and Constructors
 @docs Test, Event, OrdealProgram
 
-# Writing suites
+# Writing tests
 @docs run, describe, xdescribe, test, xtest, andTest
 
 # Writing expectations
 @docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeDefined, shouldNotBeDefined, shouldContain, shouldNotContain, shouldBeLessThan, shouldBeGreaterThan
 -}
 
-import String
 import Time exposing (Time)
+import Process
 import Task exposing (Task)
 import Regex exposing (Regex)
 import Json.Encode
-import Html exposing (Html)
-import Html.App
-
-andThen: (a -> Task x b) -> Task x a -> Task x b
-andThen = flip Task.andThen
+-- FIXME remove when issue is fixed https://github.com/elm-lang/elm-make/issues/134
+import Json.Decode
 
 {-| A `Test` is something
 -}
@@ -86,7 +83,7 @@ andTest: (a -> Expectation) -> Task e a -> Expectation
 andTest spec task =
   task
   |> Task.mapError toString
-  |> andThen spec
+  |> Task.andThen spec
 
 
 -- Matchers
@@ -158,7 +155,7 @@ shouldBeGreaterThan = compare Greater (>)
 -- Runner
 
 {-|-}
-type alias OrdealProgram = Program Settings
+type alias OrdealProgram = Program Settings Model Msg
 
 type alias TestId = Int
 
@@ -211,19 +208,19 @@ type alias StartReport =
   }
 
 type alias EndReport =
-  { failures: List Tested
+  { successes: List Tested
+  , failures: List Tested
   , skipped: List Tested
   , timeouts: List Tested
   }
 
 {-|-}
-run: EventEmitter Msg -> Test -> Program Settings
+run: EventEmitter Msg -> Test -> OrdealProgram
 run emitter test =
-  Html.App.programWithFlags
+  Platform.programWithFlags
     { init = init emitter test
     , update = update emitter
     , subscriptions = subscriptions
-    , view = view
     }
 
 init: EventEmitter Msg -> Test -> Settings -> (Model, Cmd Msg)
@@ -240,7 +237,7 @@ init emitter spec settings =
 
 message: Msg -> Cmd Msg
 message msg =
-  Task.perform (always msg) (always msg) (Task.succeed ())
+  Task.perform (always msg) (Task.succeed ())
 
 update: EventEmitter Msg -> Msg -> Model -> (Model, Cmd Msg)
 update emitter msg model =
@@ -259,62 +256,75 @@ update emitter msg model =
             TestRun nextTest ->
               updatedModel ! [
                 testStarted emitter nextTest.name,
-                Task.perform
-                  (\(err, start, end) -> RunnedTest nextTest (Failure err, start, end))
-                  (RunnedTest nextTest)
-                  (wrap nextTest.expectation)
+                Task.attempt
+                  (\taskResult -> case taskResult of
+                    Ok res -> RunnedTest nextTest res
+                    Err (err, start, end) -> RunnedTest nextTest (Failure err, start, end)
+                  )
+                  (wrap nextTest.expectation),
+                Task.attempt
+                  (\taskResult -> case taskResult of
+                    Ok res -> RunnedTest nextTest res
+                    Err (err, start, end) -> RunnedTest nextTest (Failure err, start, end)
+                  )
+                  (wrap <| timeout model.timeout)
               ]
 
     RunnedTest value (result, start, end) ->
-      let
-        testedTemplate =
-          { name = value.name
-          , suites = []
-          , success = False
-          , timeout = False
-          , skipped = False
-          , failure = ""
-          , start = start
-          , end = end
-          , duration = end - start
+      if testAlreadyDone value.id model.report
+      then (model, Cmd.none)
+      else (
+        let
+          testedTemplate =
+            { name = value.name
+            , suites = []
+            , success = False
+            , timeout = False
+            , skipped = False
+            , failure = ""
+            , start = start
+            , end = end
+            , duration = end - start
           }
 
-        tested = case result of
-          Success -> { testedTemplate | success = True }
-          Failure err -> { testedTemplate | success = False, failure = err }
-          Timeout -> { testedTemplate | timeout = True }
-          Skipped -> { testedTemplate | skipped = True }
-      in
-        { model | report = updateReport value.id tested model.report } ! [ testDone emitter tested, message <| Run model.queue]
+          tested = case result of
+            Success -> { testedTemplate | success = True }
+            Timeout -> { testedTemplate | timeout = True }
+            Skipped -> { testedTemplate | skipped = True }
+            Failure err -> { testedTemplate | failure = err }
+        in
+          { model | report = updateReport value.id tested model.report } ! [ testDone emitter tested, message <| Run model.queue]
+      )
 
     Done ->
       (model, done emitter <| makeEndReport model.report)
 
 subscriptions: Model -> Sub Msg
-subscriptions model =
+qsubscriptions model =
   Sub.none
 
-view: Model -> Html Msg
-view model =
-  Html.text ""
-
-onError = flip Task.onError
+timeout: Time -> Expectation
+timeout duration =
+  Process.spawn (Task.succeed ())
+  |> Task.andThen (\_ -> Process.sleep duration)
+  |> Task.map (always Timeout)
+  |> Task.mapError (always "")
 
 wrap: Expectation -> Task (String, Time, Time) (TestResult, Time, Time)
 wrap expectation =
   Time.now
-  |> andThen (\start ->
+  |> Task.andThen (\start ->
     expectation
     |> Task.map (\res -> (res, start))
     |> Task.mapError (\err -> (err, start))
   )
-  |> andThen (\(result, start) ->
+  |> Task.andThen (\(result, start) ->
     Time.now
     |> Task.map (\end -> (result, start, end))
   )
-  |> onError (\(result, start) ->
+  |> Task.onError (\(result, start) ->
     Time.now
-    |> andThen (\end -> Task.fail (result, start, end))
+    |> Task.andThen (\end -> Task.fail (result, start, end))
   )
 
 initReport: TestId -> Test -> (TestId, Report, Queue)
@@ -340,12 +350,18 @@ initReport lastId spec =
       in
         (nextId, ReportSuite name (List.reverse structure), queue ++ [ SuiteDone name ])
 
+testAlreadyDone: TestId -> Report -> Bool
+testAlreadyDone id report =
+  case report of
+    ReportSuite name tests -> List.foldl (\test acc -> acc || testAlreadyDone id test) False tests
+    ReportTest params -> params.id == id && params.result /= Nothing
+
 updateReport: TestId -> Tested -> Report -> Report
 updateReport id tested report =
   case report of
     ReportSuite name tests -> ReportSuite name (List.map (updateReport id tested) tests)
     ReportTest params ->
-      if params.id == id
+      if params.id == id && params.result == Nothing
       then ReportTest { params | result = Just tested }
       else ReportTest params
 
@@ -367,11 +383,11 @@ makeEndReport: Report -> EndReport
 makeEndReport report =
   extratSubsets report
 
-emptySubset: { failures: List Tested, skipped: List Tested, timeouts: List Tested }
+emptySubset: { successes: List Tested, failures: List Tested, skipped: List Tested, timeouts: List Tested }
 emptySubset =
-  { failures = [], skipped = [], timeouts = [] }
+  { successes = [], failures = [], skipped = [], timeouts = [] }
 
-extratSubsets: Report -> { failures: List Tested, skipped: List Tested, timeouts: List Tested }
+extratSubsets: Report -> { successes: List Tested, failures: List Tested, skipped: List Tested, timeouts: List Tested }
 extratSubsets report =
   case report of
     ReportTest { id, result } -> case result of
@@ -381,15 +397,20 @@ extratSubsets report =
         then { emptySubset | skipped = [ r ] }
         else if r.timeout
         then { emptySubset | timeouts = [ r ] }
-        else if (not r.success)
-        then { emptySubset | failures = [ r ] }
-        else emptySubset
+        else if r.success
+        then { emptySubset | successes = [ r ] }
+        else { emptySubset | failures = [ r ] }
 
     ReportSuite name reports ->
       List.foldl
         (\r acc ->
-          let { failures, skipped, timeouts } = extratSubsets r
-          in { failures = acc.failures ++ failures, skipped = acc.skipped ++ skipped, timeouts = acc.timeouts ++ timeouts }
+          let { successes, failures, skipped, timeouts } = extratSubsets r
+          in
+            { successes = acc.successes ++ successes
+            , failures  = acc.failures  ++ failures
+            , skipped   = acc.skipped   ++ skipped
+            , timeouts  = acc.timeouts  ++ timeouts
+          }
         )
         emptySubset
         reports
@@ -456,7 +477,8 @@ encodeStartReport report =
 encodeEndReport: EndReport -> Json.Encode.Value
 encodeEndReport report =
   Json.Encode.object
-    [ ("failures", Json.Encode.list <| List.map encodeTested report.failures)
+    [ ("successes", Json.Encode.list <| List.map encodeTested report.successes)
+    , ("failures", Json.Encode.list <| List.map encodeTested report.failures)
     , ("skipped", Json.Encode.list <| List.map encodeTested report.skipped)
     , ("timeouts", Json.Encode.list <| List.map encodeTested report.timeouts)
     ]

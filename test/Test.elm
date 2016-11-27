@@ -1,6 +1,7 @@
 port module Test exposing (..)
 
 import Task
+import Process
 import Ordeal exposing (..)
 
 main: OrdealProgram
@@ -33,5 +34,10 @@ all =
     )
     , test "Another failure" (
       ["a","b","c"] |> shouldContain "d"
+    )
+    , test "This test will timeout" (
+      Process.sleep 10000
+      |> Task.map (always 1)
+      |> andTest (\value -> value |> shouldEqual 1)
     )
     ]
