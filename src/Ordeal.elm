@@ -300,7 +300,7 @@ update emitter msg model =
       (model, done emitter <| makeEndReport model.report)
 
 subscriptions: Model -> Sub Msg
-qsubscriptions model =
+subscriptions model =
   Sub.none
 
 timeout: Time -> Expectation
