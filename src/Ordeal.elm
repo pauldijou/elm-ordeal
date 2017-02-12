@@ -8,6 +8,8 @@ module Ordeal exposing
   , test
   , xtest
   , andTest
+  , success
+  , failure
   , shouldEqual
   , shouldNotEqual
   , shouldMatch
@@ -85,6 +87,15 @@ andTest spec task =
   |> Task.mapError toString
   |> Task.andThen spec
 
+{-|-}
+success: Expectation
+success =
+  Task.succeed Success
+
+{-|-}
+failure: String -> Expectation
+failure reason =
+  Task.succeed (Failure reason)
 
 -- Matchers
 
