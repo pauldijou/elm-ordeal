@@ -52,13 +52,52 @@ all =
 
 ## Running tests
 
-Consider using [elm-ordeal-cli](https://github.com/pauldijou/elm-ordeal-cli)
+The easiest way is to use the [elm-ordeal](https://www.npmjs.com/package/elm-ordeal) CLI with Yarn or NPM.
 
+
+### Getting started
 
 ```bash
-npm install elm-ordeal-cli
-elm-ordeal-cli your/TestFile.elm --node
+# NPM users
+npm install elm-ordeal
+# Yarn users
+yarn add elm-ordeal
+
+# Run
+elm-ordeal your/TestFile.elm --node
+
+# Learn
+elm-ordeal --help
 ```
+
+You could also update your `package.json` file:
+
+```json
+{
+  "scripts": {
+    "test": "elm-ordeal your/TestFile.elm --node"
+  }
+}
+```
+
+```bash
+npm test
+```
+
+### Envs
+
+You can run your tests on the following environments, just specify the correct CLI argument when running `elm-ordeal`. Don't forget it's up to you to locally install any browser you want to use.
+
+- Node (`--node`)
+- Chrome (`--chrome`)
+- Firefox (`--firefox`)
+- Safari (`--safari`)
+- Edge / Internet Explorer (`--ie`)
+- Opera (`--opera`)
+
+## Thanks
+
+A big thank to [@rtfeldman](https://github.com/gaearon) for creating [node-test-runner](https://github.com/rtfeldman/node-test-runner) which I took a lot of inspiration from.
 
 ## License
 

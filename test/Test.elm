@@ -35,9 +35,20 @@ all =
     , test "Another failure" (
       ["a","b","c"] |> shouldContain "d"
     )
+    , test "This test will take nearly 50ms" (
+      Process.sleep 50
+      |> Task.map (always 1)
+      |> andTest (\value -> value |> shouldEqual 1)
+    )
     , test "This test will timeout" (
       Process.sleep 10000
       |> Task.map (always 1)
       |> andTest (\value -> value |> shouldEqual 1)
+    )
+    , test "This is a success" (
+      success
+    )
+    , test "This is a failure" (
+      failure "You failed"
     )
     ]

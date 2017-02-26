@@ -28,7 +28,7 @@ module Ordeal exposing
 @docs Test, Event, OrdealProgram
 
 # Writing tests
-@docs run, describe, xdescribe, test, xtest, andTest
+@docs run, describe, xdescribe, test, xtest, andTest, success, failure
 
 # Writing expectations
 @docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeDefined, shouldNotBeDefined, shouldContain, shouldNotContain, shouldBeLessThan, shouldBeGreaterThan
