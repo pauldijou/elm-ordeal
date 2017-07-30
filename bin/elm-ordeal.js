@@ -3,16 +3,15 @@
 process.title = 'elm-ordeal'
 
 var path = require('path')
-var fs = require('fs')
 var compile = require('node-elm-compiler').compile
-var temp = require('temp').track()
 var spawn = require('cross-spawn')
 var Server = require('karma').Server
-var chalk = require('chalk')
-var symbols = require('log-symbols')
 
 var moduleRoot = path.resolve(__dirname, '..')
 var helpers = require(path.join(moduleRoot, 'cli', 'helpers.js'))
+var files = require(path.join(moduleRoot, 'cli', 'files.js'))
+
+var stdoutReporter = require(path.join(moduleRoot, 'cli', 'reporters', 'stdout.js'))
 
 var defaults = {
   timeout: 5000
@@ -27,8 +26,9 @@ var args = require('minimist')(process.argv.slice(2), {
     timeout: 't',
     port: 'p',
     json: 'j',
+    keep: 'k'
   },
-  boolean: [ 'help', 'version', 'node', 'chrome', 'edge', 'firefox', 'safari', 'ie', 'opera' ],
+  boolean: [ 'help', 'version', 'keep', 'hard-keep', 'json', 'node', 'chrome', 'edge', 'firefox', 'safari', 'ie', 'opera' ],
   string: [ 'compiler', 'timeout', 'port' ],
   default: {
     timeout: '' + defaults.timeout
@@ -53,6 +53,8 @@ if (args.help) {
   console.log('    -t, --timeout', ' how long to wait before failing a test, in ms [number, default 5000]')
   console.log('    -j, --json', ' export result as a JSON string')
   console.log('    -p, --port', ' the name of the Elm port to use from your main test program')
+  console.log('    -k, --keep', ' keep the last generated JS file so you can debug it')
+  console.log('    --hard-keep', ' keep all generated JS file so you can debug them')
   console.log('')
   console.log('  Envs (browsers must already be installed):')
   console.log('')
@@ -67,6 +69,9 @@ if (args.help) {
   process.exit(0)
 }
 
+var cleanAtStart = !args['hard-keep']
+var cleanAtEnd = !(args['hard-keep'] || args.keep)
+
 
 // Seriously, you need to specify which file to test
 var testFile = args._[0]
@@ -78,17 +83,8 @@ if (!testFile) {
 testFile = path.resolve(testFile)
 var testDir = path.dirname(testFile)
 
-while (!fileExists(path.join(testDir, 'elm-package.json'))) {
+while (!files.exists(path.join(testDir, 'elm-package.json'))) {
   testDir = path.join(testDir, '..')
-}
-
-function fileExists(filename) {
-  try {
-    fs.accessSync(filename)
-    return true
-  } catch (e) {
-    return false
-  }
 }
 
 // Parsing some args
@@ -97,11 +93,28 @@ if (isNaN(args.timeout)) {
   args.timeout = defaults.timeout
 }
 
+function doNothing(ctx) { return ctx }
+
+
+// -----------------------------------------------------------------------------
 // The trial by ordeal
-createTmpFile()
+Promise.resolve({
+    sources: [ testFile ],
+    silent: false,
+    node: undefined,
+    browsers: undefined
+  })
+  .then(cleanAtStart ? files.clean : doNothing)
+  .then(function (ctx) {
+    ctx.output = files.generateTmpPath(ctx)
+    return ctx
+  })
+  .then(files.create)
   .then(compileTests)
   .then(runNode)
   .then(runBrowsers)
+  .then(cleanAtEnd ? files.clean : doNothing)
+  .then(files.check)
   .then(function (ctx) {
     process.exit(ctx.node && ctx.browsers ? 0 : 1)
   })
@@ -111,79 +124,33 @@ createTmpFile()
   })
 
 
-// Where the magic happen
-function createTmpFile() {
+// -----------------------------------------------------------------------------
+// ELM
+function compileTests(ctx) {
+  var options = {
+    output: ctx.output,
+    verbose: false,
+    yes: true,
+    spawn: function (cmd, arg, options) {
+      options = options || {}
+      options.cwd = testDir
+      return spawn(cmd, arg, options)
+    },
+    pathToMake: args.compiler && path.resolve(args.compiler),
+    warn: false
+  }
+
   return new Promise(function (resolve, reject) {
-    temp.open({ prefix: 'elm_ordeal_', suffix: '.test.js' }, function (err, info) {
-      if (err) reject(err)
-      else resolve(info.path)
+    compile(ctx.sources, options).on('close', function (exitCode) {
+      if (exitCode !== 0) { return reject('Failed to compile tests') }
+      resolve(ctx)
     })
   })
 }
 
-function compileTests(outputPath) {
-  return new Promise(function (resolve, reject) {
-    compile([ testFile ], {
-      output: outputPath,
-      verbose: false,
-      yes: true,
-      spawn: function (cmd, arg, options) {
-        options = options || {}
-        options.cwd = testDir
-        return spawn(cmd, arg, options)
-      },
-      pathToMake: args.compiler,
-      warn: false
-    }).on('close', function (exitCode) {
-      if (exitCode !== 0) reject('Failed to compile tests')
-      else resolve({ output: outputPath, node: undefined, browsers: undefined })
-    })
-  })
-}
 
-var colors = {
-  success: { color: chalk.green, symb: symbols.success },
-  error: { color: chalk.red, symb: symbols.error },
-  skipped: { color: chalk.blue, symb: symbols.info },
-  timeout: { color: chalk.yellow, symb: symbols.warning }
-}
-
-var oneSecond = 1000
-var oneMinute = 60 * oneSecond
-var oneHour = 24 * oneMinute
-
-function formatDuration(ms) {
-  if (ms === 0) { return '0ms' }
-
-  var hours = 0
-  var minutes = 0
-  var seconds = 0
-
-  if (ms > oneHour) {
-    hours = Math.floor(ms / oneHour)
-    ms = ms % oneHour
-  }
-
-  if (ms > oneMinute) {
-    minutes = Math.floor(ms / oneMinute)
-    ms = ms % oneMinute
-  }
-
-  if (ms > oneSecond) {
-    seconds = Math.floor(ms / oneSecond)
-    ms = ms % oneSecond
-  }
-
-  return (
-    (hours ? hours + ' hours ' : '') +
-    (minutes ? minutes + ' minutes ' : '') +
-    (seconds ? seconds + ' seconds ' : '') +
-    (ms ? ms + 'ms' : '')
-  )
-}
-
-var shouldPrint = !args.json
-
+// -----------------------------------------------------------------------------
+// NODE
 function runNode(ctx) {
   if (!args.node) { ctx.node = true; return ctx }
 
@@ -192,109 +159,22 @@ function runNode(ctx) {
       timeout: args.timeout
     })
 
-    var start
-    var startedAt
-    var suites = []
-
-    function pad() {
-      return ' ' + suites.map(function () { return '  ' }).join('')
-    }
-
-    helpers.subscribe(helpers.port(runner, args.port), {
-      onStarted: function onStarted(startReport) {
-        shouldPrint && console.log('')
-        start = startReport
-        startedAt = Date.now()
-      },
-
-      onSuiteStarted: function onSuiteStarted(name) {
-        shouldPrint && console.log(pad(), chalk.bold(name))
-        suites.push(name)
-      },
-
-      onSuiteDone: function onSuiteDone(name) {
-        suites.pop()
-      },
-
-      onTestStarted: function onTestStarted(name) {},
-
-      onTestDone: function onTestDone(tested) {
-        var color
-        var symb
-
-        if (tested.skipped) { color = colors.skipped.color; symb = colors.skipped.symb }
-        else if (tested.success) { color = colors.success.color; symb = colors.success.symb }
-        else if (tested.timeout) { color = colors.timeout.color; symb = colors.timeout.symb }
-        else { color = colors.error.color; symb = colors.error.symb }
-
-        shouldPrint && console.log(pad(), symb, color(tested.name), '('+ formatDuration(tested.duration) +')')
-      },
-
-      onDone: function onDone(end) {
-        var failed = end.timeouts.length > 0 || end.failures.length > 0
-        ctx.node = failed
-
-        if (args.json) {
-          console.log(end)
-          return resolve(ctx)
-        }
-
-        console.log('')
-
-        if (end.timeouts.length > 0) {
-          ctx.node = false
-          console.log('')
-          console.log(' ', colors.timeout.symb, colors.timeout.color(end.timeouts.length + ' of ' + start.tests + ' tests timeout after', formatDuration(args.timeout), ':'))
-          end.timeouts.forEach(function (tested) {
-            console.log('')
-            console.log(' ', tested.name)
-          })
-        }
-
-        if (end.failures.length > 0) {
-          ctx.node = false
-          console.log('')
-          console.log(' ', colors.error.symb, colors.error.color(end.failures.length + ' of ' + start.tests + ' tests failed:'))
-          end.failures.forEach(function (tested) {
-            console.log('')
-            console.log(' ', chalk.bold(tested.name))
-            console.log('   ', tested.failure)
-          })
-        }
-
-        console.log('')
-        console.log(' -------------------------------------------------------------')
-
-        if (failed) {
-          var msg = ''
-          if (end.failures.length > 0) {
-            msg += end.failures.length + ' failed test' + (end.failures.length > 1 ? 's' : '')
-          }
-          if (end.timeouts.length > 0) {
-            if (msg) { msg += ', ' }
-            msg += end.timeouts.length + ' timeout' + (end.timeouts.length > 1 ? 's' : '')
-          }
-          console.log('')
-          console.log(' ', colors.error.symb, colors.error.color('Failure:'), msg)
-        } else {
-          console.log('')
-          console.log(' ', colors.success.symb, colors.success.color('All ' + start.tests + ' tests passed'))
-          if (end.skipped.length > 0) {
-            console.log(' ', colors.skipped.color('(but you skipped ' + end.skipped.length + ' of them)'))
-          }
-        }
-
-        var endedAt = new Date()
-        console.log('')
-        console.log(' ', chalk.bold('Duration:'), formatDuration(endedAt - startedAt))
-
-        console.log('')
+    var reporter = stdoutReporter.init({
+      silent: false,
+      timeout: args.timeout,
+      done: function (failed) {
+        ctx.node = !failed
         resolve(ctx)
       }
     })
+
+    helpers.subscribe(helpers.port(runner, args.port), reporter)
   })
 }
 
+
+// -----------------------------------------------------------------------------
+// KARMA
 function runBrowsers(ctx) {
   var browsers = []
   var plugins = []

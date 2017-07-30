@@ -5,7 +5,7 @@
   "description": "Run tests like a boss",
   "repository": "https://github.com/pauldijou/elm-ordeal-cli.git",
   "scripts": {
-    "test": "./bin/elm-ordeal.js ./test/Test.elm --node --timeout=100 --compiler=./node_modules/.bin/elm-make",
+    "test": "./bin/elm-ordeal.js ./test/Test.elm --keep --node --timeout=100 --compiler=./node_modules/.bin/elm-make",
     "help": "./bin/elm-ordeal.js --help",
     "version": "./bin/elm-ordeal.js --version"
   },
@@ -24,10 +24,10 @@
     "karma-safari-launcher": "1.0.0",
     "log-symbols": "2.0.0",
     "minimist": "1.2.0",
-    "node-elm-compiler": "4.3.1",
-    "temp": "0.8.3"
+    "node-elm-compiler": "4.3.1"
   },
   "devDependencies": {
-    "elm": "^0.18.0"
+    "elm": "^0.18.0",
+    "os-tmpdir": "^1.0.2"
   }
 }
