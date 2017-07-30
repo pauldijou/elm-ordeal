@@ -25,9 +25,10 @@ var args = require('minimist')(process.argv.slice(2), {
     version: 'V',
     compiler: 'c',
     timeout: 't',
-    port: 'p'
+    port: 'p',
+    json: 'j',
   },
-  boolean: [ 'help', 'version', 'node', 'chrome', 'firefox', 'safari', 'ie', 'opera' ],
+  boolean: [ 'help', 'version', 'node', 'chrome', 'edge', 'firefox', 'safari', 'ie', 'opera' ],
   string: [ 'compiler', 'timeout', 'port' ],
   default: {
     timeout: '' + defaults.timeout
@@ -40,25 +41,28 @@ if (args.version) {
 }
 
 if (args.help) {
-  console.log('Usage:')
+  console.log('  Usage:')
   console.log('')
-  console.log('  elm-ordeal your/TestFile.elm [--compiler /path/to/elm-make]')
+  console.log('    elm-ordeal your/TestFile.elm [--compiler /path/to/elm-make]')
   console.log('')
-  console.log('Options:')
+  console.log('  Options:')
   console.log('')
-  console.log('  -h, --help', '    output usage information')
-  console.log('  -V, --version', ' output the version number')
-  console.log('  -c, --compiler', 'specify which elm-make to use')
-  console.log('  -t, --timeout', ' how long to wait before failing a test, in ms [number, default 5000]')
+  console.log('    -h, --help', '    output usage information')
+  console.log('    -V, --version', ' output the version number')
+  console.log('    -c, --compiler', 'specify which elm-make to use')
+  console.log('    -t, --timeout', ' how long to wait before failing a test, in ms [number, default 5000]')
+  console.log('    -j, --json', ' export result as a JSON string')
+  console.log('    -p, --port', ' the name of the Elm port to use from your main test program')
   console.log('')
-  console.log('Envs (browsers must already be installed):')
+  console.log('  Envs (browsers must already be installed):')
   console.log('')
-  console.log('  --node')
-  console.log('  --chrome')
-  console.log('  --firefox')
-  console.log('  --safari')
-  console.log('  --ie')
-  console.log('  --opera')
+  console.log('    --node')
+  console.log('    --chrome')
+  console.log('    --edge')
+  console.log('    --firefox')
+  console.log('    --safari')
+  console.log('    --ie')
+  console.log('    --opera')
   console.log('')
   process.exit(0)
 }
@@ -137,6 +141,49 @@ function compileTests(outputPath) {
   })
 }
 
+var colors = {
+  success: { color: chalk.green, symb: symbols.success },
+  error: { color: chalk.red, symb: symbols.error },
+  skipped: { color: chalk.blue, symb: symbols.info },
+  timeout: { color: chalk.yellow, symb: symbols.warning }
+}
+
+var oneSecond = 1000
+var oneMinute = 60 * oneSecond
+var oneHour = 24 * oneMinute
+
+function formatDuration(ms) {
+  if (ms === 0) { return '0ms' }
+
+  var hours = 0
+  var minutes = 0
+  var seconds = 0
+
+  if (ms > oneHour) {
+    hours = Math.floor(ms / oneHour)
+    ms = ms % oneHour
+  }
+
+  if (ms > oneMinute) {
+    minutes = Math.floor(ms / oneMinute)
+    ms = ms % oneMinute
+  }
+
+  if (ms > oneSecond) {
+    seconds = Math.floor(ms / oneSecond)
+    ms = ms % oneSecond
+  }
+
+  return (
+    (hours ? hours + ' hours ' : '') +
+    (minutes ? minutes + ' minutes ' : '') +
+    (seconds ? seconds + ' seconds ' : '') +
+    (ms ? ms + 'ms' : '')
+  )
+}
+
+var shouldPrint = !args.json
+
 function runNode(ctx) {
   if (!args.node) { ctx.node = true; return ctx }
 
@@ -146,6 +193,7 @@ function runNode(ctx) {
     })
 
     var start
+    var startedAt
     var suites = []
 
     function pad() {
@@ -154,12 +202,13 @@ function runNode(ctx) {
 
     helpers.subscribe(helpers.port(runner, args.port), {
       onStarted: function onStarted(startReport) {
-        console.log('')
+        shouldPrint && console.log('')
         start = startReport
+        startedAt = Date.now()
       },
 
       onSuiteStarted: function onSuiteStarted(name) {
-        console.log(pad(), chalk.bold(name))
+        shouldPrint && console.log(pad(), chalk.bold(name))
         suites.push(name)
       },
 
@@ -173,22 +222,29 @@ function runNode(ctx) {
         var color
         var symb
 
-        if (tested.skipped) { color = chalk.yellow; symb = symbols.warning }
-        else if (tested.success) { color = chalk.green; symb = symbols.success }
-        else if (tested.timeout) { color = chalk.magenta; symb = symbols.error }
-        else { color = chalk.red; symb = symbols.error }
+        if (tested.skipped) { color = colors.skipped.color; symb = colors.skipped.symb }
+        else if (tested.success) { color = colors.success.color; symb = colors.success.symb }
+        else if (tested.timeout) { color = colors.timeout.color; symb = colors.timeout.symb }
+        else { color = colors.error.color; symb = colors.error.symb }
 
-        console.log(pad(), symb, color(tested.name), '('+ tested.duration +'ms)')
+        shouldPrint && console.log(pad(), symb, color(tested.name), '('+ formatDuration(tested.duration) +')')
       },
 
       onDone: function onDone(end) {
-        ctx.node = true
+        var failed = end.timeouts.length > 0 || end.failures.length > 0
+        ctx.node = failed
+
+        if (args.json) {
+          console.log(end)
+          return resolve(ctx)
+        }
+
         console.log('')
 
         if (end.timeouts.length > 0) {
           ctx.node = false
           console.log('')
-          console.log(' ', symbols.error, chalk.magenta(end.timeouts.length + ' of ' + start.tests + ' tests timeout:'))
+          console.log(' ', colors.timeout.symb, colors.timeout.color(end.timeouts.length + ' of ' + start.tests + ' tests timeout after', formatDuration(args.timeout), ':'))
           end.timeouts.forEach(function (tested) {
             console.log('')
             console.log(' ', tested.name)
@@ -198,7 +254,7 @@ function runNode(ctx) {
         if (end.failures.length > 0) {
           ctx.node = false
           console.log('')
-          console.log(' ', symbols.error, chalk.red(end.failures.length + ' of ' + start.tests + ' tests failed:'))
+          console.log(' ', colors.error.symb, colors.error.color(end.failures.length + ' of ' + start.tests + ' tests failed:'))
           end.failures.forEach(function (tested) {
             console.log('')
             console.log(' ', chalk.bold(tested.name))
@@ -206,13 +262,31 @@ function runNode(ctx) {
           })
         }
 
-        if (ctx.node) {
+        console.log('')
+        console.log(' -------------------------------------------------------------')
+
+        if (failed) {
+          var msg = ''
+          if (end.failures.length > 0) {
+            msg += end.failures.length + ' failed test' + (end.failures.length > 1 ? 's' : '')
+          }
+          if (end.timeouts.length > 0) {
+            if (msg) { msg += ', ' }
+            msg += end.timeouts.length + ' timeout' + (end.timeouts.length > 1 ? 's' : '')
+          }
           console.log('')
-          console.log(' ', symbols.success, chalk.green('All ' + start.tests + ' tests passed'))
+          console.log(' ', colors.error.symb, colors.error.color('Failure:'), msg)
+        } else {
+          console.log('')
+          console.log(' ', colors.success.symb, colors.success.color('All ' + start.tests + ' tests passed'))
           if (end.skipped.length > 0) {
-            console.log(' ', chalk.yellow('(but you skipped ' + end.skipped.length + ' of them)'))
+            console.log(' ', colors.skipped.color('(but you skipped ' + end.skipped.length + ' of them)'))
           }
         }
+
+        var endedAt = new Date()
+        console.log('')
+        console.log(' ', chalk.bold('Duration:'), formatDuration(endedAt - startedAt))
 
         console.log('')
         resolve(ctx)
@@ -225,6 +299,7 @@ function runBrowsers(ctx) {
   var browsers = []
   var plugins = []
   if (args.chrome) { browsers.push('Chrome'); plugins.push('karma-chrome-launcher') }
+  if (args.edge) { browsers.push('Edge'); plugins.push('karma-edge-launcher') }
   if (args.firefox) { browsers.push('Firefox'); plugins.push('karma-firefox-launcher') }
   if (args.safari) { browsers.push('Safari'); plugins.push('karma-safari-launcher') }
   if (args.ie) { browsers.push('IE'); plugins.push('karma-ie-launcher') }

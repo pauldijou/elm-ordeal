@@ -22,15 +22,15 @@ all =
       , test "Another sub-test" (
         True |> shouldNotEqual False
       )
+      , test "My first failure" (
+        Task.fail { a = 1, b = "aze" } |> andTest (\value -> value |> shouldEqual "54")
+      )
       ]
     , xtest "A skipped test" (
       "a" |> shouldEqual "b"
     )
     , test "My first async test" (
       Task.succeed 42 |> andTest (\value -> value |> shouldBeGreaterThan 35)
-    )
-    , test "My first failure" (
-      Task.fail { a = 1, b = "aze" } |> andTest (\value -> value |> shouldEqual "54")
     )
     , test "Another failure" (
       ["a","b","c"] |> shouldContain "d"
@@ -51,4 +51,38 @@ all =
     , test "This is a failure" (
       failure "You failed"
     )
+    , describe "Task"
+      [ test "should succeed" (
+        Task.succeed 1
+        |> shouldSucceed
+      )
+      , test "should succeed but will not" (
+        Task.fail True
+        |> shouldSucceed
+      )
+      , test "should succeed with 1" (
+        Task.succeed 1
+        |> shouldSucceedWith 1
+      )
+      , test "should succeed with True but will not" (
+        Task.succeed False
+        |> shouldSucceedWith True
+      )
+      , test "should fail" (
+        Task.fail "boom"
+        |> shouldFail
+      )
+      , test "should fail but will not" (
+        Task.succeed 4.2
+        |> shouldFail
+      )
+      , test "should fail with { a = 1, b = True}" (
+        Task.fail { a = 1, b = True}
+        |> shouldFailWith { b = True, a = 1 }
+      )
+      , test "should fail with 'a' but will not" (
+        Task.fail "b"
+        |> shouldFailWith "a"
+      )
+      ]
     ]

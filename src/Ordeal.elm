@@ -20,6 +20,10 @@ module Ordeal exposing
   , shouldNotContain
   , shouldBeLessThan
   , shouldBeGreaterThan
+  , shouldSucceed
+  , shouldSucceedWith
+  , shouldFail
+  , shouldFailWith
   )
 
 {-| An `Ordeal` is a trial to see if your code is good enough to reach the production heaven or not.
@@ -31,7 +35,7 @@ module Ordeal exposing
 @docs run, describe, xdescribe, test, xtest, andTest, success, failure
 
 # Writing expectations
-@docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeDefined, shouldNotBeDefined, shouldContain, shouldNotContain, shouldBeLessThan, shouldBeGreaterThan
+@docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeDefined, shouldNotBeDefined, shouldContain, shouldNotContain, shouldBeLessThan, shouldBeGreaterThan, shouldSucceed, shouldSucceedWith, shouldFail, shouldFailWith
 -}
 
 import Time exposing (Time)
@@ -162,6 +166,34 @@ shouldBeLessThan = compare Less (<)
 shouldBeGreaterThan: comparable -> comparable -> Expectation
 shouldBeGreaterThan = compare Greater (>)
 
+{-|-}
+shouldSucceed: Task a b -> Expectation
+shouldSucceed task =
+  task
+  |> Task.map (\success -> Success)
+  |> Task.onError(\err -> Task.succeed <| Failure <| "Task was supposed to succeed but failed with: " ++ (toString err))
+
+{-|-}
+shouldSucceedWith: b -> Task a b -> Expectation
+shouldSucceedWith result task =
+  task
+  |> Task.mapError toString
+  |> Task.andThen (shouldEqual result)
+  |> Task.onError(\err -> Task.succeed <| Failure <| "Task was supposed to succeed but failed with: " ++ err)
+
+{-|-}
+shouldFail: Task a b -> Expectation
+shouldFail task =
+  task
+  |> Task.map (\success -> Failure <| "Task was supposed to failed but succeed with: " ++ (toString success))
+  |> Task.onError(\_ -> Task.succeed Success)
+
+{-|-}
+shouldFailWith: a -> Task a b -> Expectation
+shouldFailWith error task =
+  task
+  |> Task.map (\success -> Failure <| "Task was supposed to failed but succeed with: " ++ (toString success))
+  |> Task.onError(shouldEqual error)
 
 -- Runner
 
