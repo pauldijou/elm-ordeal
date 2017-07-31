@@ -8,6 +8,7 @@ module Ordeal exposing
   , test
   , xtest
   , andTest
+  , andThen
   , success
   , failure
   , skipped
@@ -34,7 +35,7 @@ module Ordeal exposing
 @docs Test, Event, Ordeal
 
 # Writing tests
-@docs run, describe, xdescribe, test, xtest, andTest, success, failure, skipped, timeout
+@docs run, describe, xdescribe, test, xtest, andTest, andThen, success, failure, skipped, timeout
 
 # Writing expectations
 @docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeDefined, shouldNotBeDefined, shouldContain, shouldNotContain, shouldBeLessThan, shouldBeGreaterThan, shouldSucceed, shouldSucceedWith, shouldFail, shouldFailWith
@@ -92,6 +93,17 @@ andTest spec task =
   task
   |> Task.mapError toString
   |> Task.andThen spec
+
+{-|-}
+andThen: Expectation -> Expectation -> Expectation
+andThen second first =
+  first
+  |> Task.andThen (\result -> case result of
+    Success -> second
+    Skipped -> skipped
+    Timeout -> timeout
+    Failure reason -> failure reason
+  )
 
 {-|-}
 success: Expectation

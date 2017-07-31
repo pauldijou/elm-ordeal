@@ -57,6 +57,18 @@ all =
     , test "This test will be timeout" (
       timeout
     )
+    , test "andTest" (
+      Task.succeed 1
+      |> andTest (\value ->
+        if (value == 1) then success else failure "Should be 1"
+      )
+    )
+    , test "andThen" (
+      success
+      |> andThen ("abc" |> shouldEqual "abc")
+      |> andThen (42    |> shouldEqual 42)
+      |> andThen (True  |> shouldEqual True)
+    )
     , describe "Task"
       [ test "should succeed" (
         Task.succeed 1
