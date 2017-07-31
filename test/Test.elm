@@ -4,7 +4,7 @@ import Task
 import Process
 import Ordeal exposing (..)
 
-main: OrdealProgram
+main: Ordeal
 main = run emit all
 
 port emit : Event -> Cmd msg
@@ -50,6 +50,12 @@ all =
     )
     , test "This is a failure" (
       failure "You failed"
+    )
+    , test "This test will be skipped" (
+      skipped
+    )
+    , test "This test will be timeout" (
+      timeout
     )
     , describe "Task"
       [ test "should succeed" (

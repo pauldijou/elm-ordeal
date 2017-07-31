@@ -1,7 +1,7 @@
 module Ordeal exposing
   ( Test
   , Event
-  , OrdealProgram
+  , Ordeal
   , run
   , describe
   , xdescribe
@@ -10,6 +10,8 @@ module Ordeal exposing
   , andTest
   , success
   , failure
+  , skipped
+  , timeout
   , shouldEqual
   , shouldNotEqual
   , shouldMatch
@@ -29,10 +31,10 @@ module Ordeal exposing
 {-| An `Ordeal` is a trial to see if your code is good enough to reach the production heaven or not.
 
 # Type and Constructors
-@docs Test, Event, OrdealProgram
+@docs Test, Event, Ordeal
 
 # Writing tests
-@docs run, describe, xdescribe, test, xtest, andTest, success, failure
+@docs run, describe, xdescribe, test, xtest, andTest, success, failure, skipped, timeout
 
 # Writing expectations
 @docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeDefined, shouldNotBeDefined, shouldContain, shouldNotContain, shouldBeLessThan, shouldBeGreaterThan, shouldSucceed, shouldSucceedWith, shouldFail, shouldFailWith
@@ -101,6 +103,15 @@ failure: String -> Expectation
 failure reason =
   Task.succeed (Failure reason)
 
+{-|-}
+skipped: Expectation
+skipped =
+  Task.succeed Skipped
+
+{-|-}
+timeout: Expectation
+timeout =
+  Task.succeed Timeout
 -- Matchers
 
 operatorToString: Operator -> Bool -> a -> b -> String
@@ -198,7 +209,7 @@ shouldFailWith error task =
 -- Runner
 
 {-|-}
-type alias OrdealProgram = Program Settings Model Msg
+type alias Ordeal = Program Settings Model Msg
 
 type alias TestId = Int
 
@@ -258,7 +269,7 @@ type alias EndReport =
   }
 
 {-|-}
-run: EventEmitter Msg -> Test -> OrdealProgram
+run: EventEmitter Msg -> Test -> Ordeal
 run emitter test =
   Platform.programWithFlags
     { init = init emitter test
@@ -280,7 +291,7 @@ init emitter spec settings =
 
 message: Msg -> Cmd Msg
 message msg =
-  Task.perform (always msg) (Task.succeed ())
+  Task.perform (\_ -> msg) (Task.succeed ())
 
 update: EventEmitter Msg -> Msg -> Model -> (Model, Cmd Msg)
 update emitter msg model =
@@ -310,7 +321,7 @@ update emitter msg model =
                     Ok res -> RunnedTest nextTest res
                     Err (err, start, end) -> RunnedTest nextTest (Failure err, start, end)
                   )
-                  (wrap <| timeout model.timeout)
+                  (wrap <| timeoutIn model.timeout)
               ]
 
     RunnedTest value (result, start, end) ->
@@ -346,12 +357,12 @@ subscriptions: Model -> Sub Msg
 subscriptions model =
   Sub.none
 
-timeout: Time -> Expectation
-timeout duration =
+timeoutIn: Time -> Expectation
+timeoutIn duration =
   Process.spawn (Task.succeed ())
   |> Task.andThen (\_ -> Process.sleep duration)
-  |> Task.map (always Timeout)
-  |> Task.mapError (always "")
+  |> Task.map (\_ -> Timeout)
+  |> Task.mapError (\_ -> "")
 
 wrap: Expectation -> Task (String, Time, Time) (TestResult, Time, Time)
 wrap expectation =

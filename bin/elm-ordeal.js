@@ -87,6 +87,11 @@ while (!files.exists(path.join(testDir, 'elm-package.json'))) {
   testDir = path.join(testDir, '..')
 }
 
+if (testDir === path.join(testDir, '..')) {
+  console.log('We want all the way up to the root dir and could not find an elm-package.json file')
+  process.exit(1)
+}
+
 // Parsing some args
 args.timeout = parseInt(args.timeout, 10)
 if (isNaN(args.timeout)) {
@@ -126,6 +131,23 @@ Promise.resolve({
 
 // -----------------------------------------------------------------------------
 // ELM
+if (args.compiler === undefined) {
+  console.log(process.cwd())
+  var path1 = path.join(__dirname, '..', '..', '.bin', 'elm-make')
+  var path2 = path.join(process.cwd(), 'node_modules', '.bin', 'elm-make')
+  var path3 = path.join(process.cwd(), '..', 'node_modules', '.bin', 'elm-make')
+
+  if (files.exists(path1)) {
+    args.compiler = path1
+  } else if (files.exists(path2)) {
+    args.compiler = path2
+  } else if (files.exists(path3)) {
+    args.compiler = path3
+  } else {
+    args.compiler = 'elm-make'
+  }
+}
+
 function compileTests(ctx) {
   var options = {
     output: ctx.output,
@@ -136,7 +158,7 @@ function compileTests(ctx) {
       options.cwd = testDir
       return spawn(cmd, arg, options)
     },
-    pathToMake: args.compiler && path.resolve(args.compiler),
+    pathToMake: args.compiler,
     warn: false
   }
 

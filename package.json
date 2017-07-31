@@ -1,11 +1,11 @@
 {
   "name": "elm-ordeal",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "license": "Apache-2.0",
   "description": "Run tests like a boss",
   "repository": "https://github.com/pauldijou/elm-ordeal-cli.git",
   "scripts": {
-    "test": "./bin/elm-ordeal.js ./test/Test.elm --keep --node --timeout=100 --compiler=./node_modules/.bin/elm-make",
+    "test": "./bin/elm-ordeal.js ./test/Test.elm --node --timeout=100",
     "help": "./bin/elm-ordeal.js --help",
     "version": "./bin/elm-ordeal.js --version"
   },
