@@ -13,6 +13,7 @@ module Ordeal exposing
   , failure
   , skipped
   , timeout
+  , lazy
   , shouldEqual
   , shouldNotEqual
   , shouldMatch
@@ -35,7 +36,7 @@ module Ordeal exposing
 @docs Test, Event, Ordeal
 
 # Writing tests
-@docs run, describe, xdescribe, test, xtest, andTest, andThen, success, failure, skipped, timeout
+@docs run, describe, xdescribe, test, xtest, andTest, andThen, success, failure, skipped, timeout, lazy
 
 # Writing expectations
 @docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeDefined, shouldNotBeDefined, shouldContain, shouldNotContain, shouldBeLessThan, shouldBeGreaterThan, shouldSucceed, shouldSucceedWith, shouldFail, shouldFailWith
@@ -124,6 +125,14 @@ skipped =
 timeout: Expectation
 timeout =
   Task.succeed Timeout
+
+{-|-}
+lazy: (() -> Expectation) -> Expectation
+lazy fn =
+  Task.succeed ()
+  |> Task.andThen fn
+
+
 -- Matchers
 
 operatorToString: Operator -> Bool -> a -> b -> String

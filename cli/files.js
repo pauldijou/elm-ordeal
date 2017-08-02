@@ -17,7 +17,7 @@ function generateTmpPath(ctx) {
   var now = new Date()
   var name = [
     tmpFilePrefix,
-    now.getFullYear(), '-', prependZero(now.getMonth() + 1), '-', now.getDate(),
+    now.getFullYear(), '-', prependZero(now.getMonth() + 1), '-', prependZero(now.getDate()),
     '_',
     prependZero(now.getHours()), '-', prependZero(now.getMinutes()), '-', prependZero(now.getSeconds()),
     '_',
@@ -52,8 +52,8 @@ function clean(ctx) {
 // Fails if path exists
 //
 // mode : 0o600
-// execute = 1, write = 2, read = 4 => 6 == read & write
-// 1st = user, 2nd = group, 3rd = others => only user
+// execute = 1, write = 2, read = 4 => 6 == 2 + 4 == write & read
+// 1st = user, 2nd = group, 3rd = others => 600 == only user
 function create(ctx) {
   return new Promise(function (resolve, reject) {
     fs.open(ctx.output, 'wx+', 0o600, function (err, info) {

@@ -4,7 +4,6 @@ process.title = 'elm-ordeal'
 
 var path = require('path')
 var compile = require('node-elm-compiler').compile
-var spawn = require('cross-spawn')
 var Server = require('karma').Server
 
 var moduleRoot = path.resolve(__dirname, '..')
@@ -69,14 +68,16 @@ if (args.help) {
   process.exit(0)
 }
 
+var cwd = process.cwd()
 var cleanAtStart = !args['hard-keep']
 var cleanAtEnd = !(args['hard-keep'] || args.keep)
 
 
-// Seriously, you need to specify which file to test
 var testFile = args._[0]
 
+// Seriously, you need to specify which file to test
 if (!testFile) {
+  console.log('You need to specify which file to test as the first argument of the CLI')
   process.exit(1)
 }
 
@@ -132,10 +133,9 @@ Promise.resolve({
 // -----------------------------------------------------------------------------
 // ELM
 if (args.compiler === undefined) {
-  console.log(process.cwd())
   var path1 = path.join(__dirname, '..', '..', '.bin', 'elm-make')
-  var path2 = path.join(process.cwd(), 'node_modules', '.bin', 'elm-make')
-  var path3 = path.join(process.cwd(), '..', 'node_modules', '.bin', 'elm-make')
+  var path2 = path.join(cwd, 'node_modules', '.bin', 'elm-make')
+  var path3 = path.join(cwd, '..', 'node_modules', '.bin', 'elm-make')
 
   if (files.exists(path1)) {
     args.compiler = path1
@@ -153,13 +153,11 @@ function compileTests(ctx) {
     output: ctx.output,
     verbose: false,
     yes: true,
-    spawn: function (cmd, arg, options) {
-      options = options || {}
-      options.cwd = testDir
-      return spawn(cmd, arg, options)
-    },
-    pathToMake: args.compiler,
-    warn: false
+    warn: false,
+    debug: false,
+    // report: 'json',
+    cwd: testDir,
+    pathToMake: args.compiler
   }
 
   return new Promise(function (resolve, reject) {

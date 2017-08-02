@@ -54,8 +54,11 @@ all =
     , test "This test will be skipped" (
       skipped
     )
-    , test "This test will be timeout" (
+    , test "This test will also timeout" (
       timeout
+    )
+    , test "This test is lazy" (
+      lazy (\_ -> success)
     )
     , test "andTest" (
       Task.succeed 1
