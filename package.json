@@ -5,7 +5,7 @@
   "description": "Run tests like a boss",
   "repository": "https://github.com/pauldijou/elm-ordeal-cli.git",
   "scripts": {
-    "test": "./bin/elm-ordeal.js ./test/Test.elm --node --timeout=100",
+    "test": "./bin/elm-ordeal.js ./test/Test.elm --timeout=20",
     "help": "./bin/elm-ordeal.js --help",
     "version": "./bin/elm-ordeal.js --version"
   },

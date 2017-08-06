@@ -22,6 +22,8 @@ module Ordeal exposing
   , shouldNotBeDefined
   , shouldContain
   , shouldNotContain
+  , shouldBeOneOf
+  , shouldNotBeOneOf
   , shouldBeLessThan
   , shouldBeGreaterThan
   , shouldSucceed
@@ -39,7 +41,7 @@ module Ordeal exposing
 @docs run, describe, xdescribe, test, xtest, andTest, andThen, success, failure, skipped, timeout, lazy
 
 # Writing expectations
-@docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeDefined, shouldNotBeDefined, shouldContain, shouldNotContain, shouldBeLessThan, shouldBeGreaterThan, shouldSucceed, shouldSucceedWith, shouldFail, shouldFailWith
+@docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeDefined, shouldNotBeDefined, shouldContain, shouldNotContain, shouldBeOneOf, shouldNotBeOneOf, shouldBeLessThan, shouldBeGreaterThan, shouldSucceed, shouldSucceedWith, shouldFail, shouldFailWith
 -}
 
 import Time exposing (Time)
@@ -53,8 +55,8 @@ import Json.Decode
 {-| A `Test` is something
 -}
 type Test
-  = Suite String (List Test)
-  | Test String Expectation
+  = Suite String (List Test) -- NEXT: Suite { name: String, only: Bool, tests: List Test }
+  | Test String Expectation -- NEXT: Test { name: String, only: Bool, hint: Maybe String, expectation: Expectation }
 
 type TestResult
   = Success
@@ -64,7 +66,7 @@ type TestResult
 
 type alias Expectation = Task String TestResult
 
-type Operator = Equal | Match | Contain | Less | Greater
+type Operator = Equal | Match | Contain | OneOf | Less | Greater
 
 {-|-}
 describe: String -> List Test -> Test
@@ -141,6 +143,7 @@ operatorToString op no actual expected =
     Equal -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to equal " ++ (toString expected)
     Match -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to match " ++ (toString expected)
     Contain -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to contain " ++ (toString expected)
+    OneOf -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to be one of " ++ (toString expected)
     Less -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to be less than " ++ (toString expected)
     Greater -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to be greater than " ++ (toString expected)
 
@@ -189,6 +192,14 @@ shouldContain = compare Contain (flip List.member)
 {-|-}
 shouldNotContain: a -> List a -> Expectation
 shouldNotContain = compareNot Contain (flip List.member)
+
+{-|-}
+shouldBeOneOf: List a -> a -> Expectation
+shouldBeOneOf = compare OneOf (List.member)
+
+{-|-}
+shouldNotBeOneOf: List a -> a -> Expectation
+shouldNotBeOneOf = compareNot OneOf (List.member)
 
 {-|-}
 shouldBeLessThan: comparable -> comparable -> Expectation

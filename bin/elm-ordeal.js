@@ -61,9 +61,9 @@ if (args.help) {
   console.log('    --chrome')
   console.log('    --edge')
   console.log('    --firefox')
-  console.log('    --safari')
   console.log('    --ie')
   console.log('    --opera')
+  console.log('    --safari')
   console.log('')
   process.exit(0)
 }
@@ -99,6 +99,21 @@ if (isNaN(args.timeout)) {
   args.timeout = defaults.timeout
 }
 
+// If there are no browsers, let's assume we are running node by default
+var browsers = []
+var plugins = []
+if (args.chrome) { browsers.push('Chrome'); plugins.push('karma-chrome-launcher') }
+if (args.edge) { browsers.push('Edge'); plugins.push('karma-edge-launcher') }
+if (args.firefox) { browsers.push('Firefox'); plugins.push('karma-firefox-launcher') }
+if (args.ie) { browsers.push('IE'); plugins.push('karma-ie-launcher') }
+if (args.opera) { browsers.push('Opera'); plugins.push('karma-opera-launcher') }
+if (args.safari) { browsers.push('Safari'); plugins.push('karma-safari-launcher') }
+
+if (browsers.length === 0) {
+  args.node = true
+}
+
+// Usefull
 function doNothing(ctx) { return ctx }
 
 
@@ -196,15 +211,6 @@ function runNode(ctx) {
 // -----------------------------------------------------------------------------
 // KARMA
 function runBrowsers(ctx) {
-  var browsers = []
-  var plugins = []
-  if (args.chrome) { browsers.push('Chrome'); plugins.push('karma-chrome-launcher') }
-  if (args.edge) { browsers.push('Edge'); plugins.push('karma-edge-launcher') }
-  if (args.firefox) { browsers.push('Firefox'); plugins.push('karma-firefox-launcher') }
-  if (args.safari) { browsers.push('Safari'); plugins.push('karma-safari-launcher') }
-  if (args.ie) { browsers.push('IE'); plugins.push('karma-ie-launcher') }
-  if (args.opera) { browsers.push('Opera'); plugins.push('karma-opera-launcher') }
-
   if (browsers.length === 0) { ctx.browsers = true; return ctx }
 
   return new Promise(function (resolve, reject) {

@@ -2,6 +2,7 @@ port module Test exposing (..)
 
 import Task
 import Process
+import Regex
 import Ordeal exposing (..)
 
 main: Ordeal
@@ -22,56 +23,94 @@ all =
       , test "Another sub-test" (
         True |> shouldNotEqual False
       )
-      , test "My first failure" (
-        Task.fail { a = 1, b = "aze" } |> andTest (\value -> value |> shouldEqual "54")
-      )
       ]
-    , xtest "A skipped test" (
-      "a" |> shouldEqual "b"
-    )
     , test "My first async test" (
       Task.succeed 42 |> andTest (\value -> value |> shouldBeGreaterThan 35)
     )
-    , test "Another failure" (
-      ["a","b","c"] |> shouldContain "d"
-    )
-    , test "This test will take nearly 50ms" (
-      Process.sleep 50
+    , test "This test will take nearly 10ms" (
+      Process.sleep 10
       |> Task.map (always 1)
       |> andTest (\value -> value |> shouldEqual 1)
     )
-    , test "This test will timeout" (
-      Process.sleep 10000
-      |> Task.map (always 1)
-      |> andTest (\value -> value |> shouldEqual 1)
-    )
-    , test "This is a success" (
-      success
-    )
-    , test "This is a failure" (
-      failure "You failed"
-    )
-    , test "This test will be skipped" (
-      skipped
-    )
-    , test "This test will also timeout" (
-      timeout
-    )
-    , test "This test is lazy" (
-      lazy (\_ -> success)
-    )
-    , test "andTest" (
-      Task.succeed 1
-      |> andTest (\value ->
-        if (value == 1) then success else failure "Should be 1"
+    , describe "Helpers"
+      [ test "This test is lazy" (
+        lazy (\_ -> success)
       )
-    )
-    , test "andThen" (
-      success
-      |> andThen ("abc" |> shouldEqual "abc")
-      |> andThen (42    |> shouldEqual 42)
-      |> andThen (True  |> shouldEqual True)
-    )
+      , test "andTest" (
+        Task.succeed 1
+        |> andTest (\value ->
+          if (value == 1) then success else failure "Should be 1"
+        )
+      )
+      , test "andThen" (
+        success
+        |> andThen ("abc" |> shouldEqual "abc")
+        |> andThen (42    |> shouldEqual 42)
+        |> andThen (True  |> shouldEqual True)
+      )]
+    , describe "Test results"
+      [ test "My first failure" (
+        Task.fail { a = 1, b = "aze" } |> andTest (\value -> value |> shouldEqual "54")
+      )
+      , xtest "A skipped test" (
+        "a" |> shouldEqual "b"
+      )
+      , test "This test will timeout" (
+        Process.sleep 100
+        |> Task.map (always 1)
+        |> andTest (\value -> value |> shouldEqual 1)
+      )
+      , test "This is a success" (
+        success
+      )
+      , test "This is a failure" (
+        failure "You failed"
+      )
+      , test "This test will be skipped" (
+        skipped
+      )
+      , test "This test will also timeout" (
+        timeout
+      )
+      ]
+    , describe "Operators"
+      [ test "shouldEqual" (
+        "1" |> shouldEqual "1"
+      )
+      , test "shouldNotEqual" (
+        "1" |> shouldNotEqual "2"
+      )
+      , test "shouldMatch" (
+        "abc" |> shouldMatch (Regex.regex "[a-z]+")
+      )
+      , test "shouldNotMatch" (
+        "abc" |> shouldNotMatch (Regex.regex "[A-Z]+")
+      )
+      , test "shouldBeDefined" (
+        (Just 1) |> shouldBeDefined
+      )
+      , test "shouldNotBeDefined" (
+        Nothing |> shouldNotBeDefined
+      )
+      , test "shouldContain" (
+        [1, 2, 3] |> shouldContain 2
+      )
+      , test "shouldNotContain" (
+        [1, 2, 3] |> shouldNotContain 4
+      )
+      , test "shouldBeOneOf" (
+        2 |> shouldBeOneOf [1, 2, 3]
+      )
+      , test "shouldNotBeOneOf" (
+        4 |> shouldNotBeOneOf [1, 2, 3]
+      )
+      , test "shouldBeLessThan" (
+        1 |> shouldBeLessThan 2
+      )
+      , test "shouldBeGreaterThan" (
+        2 |> shouldBeGreaterThan 1
+      )
+      ]
     , describe "Task"
       [ test "should succeed" (
         Task.succeed 1
