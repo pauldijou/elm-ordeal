@@ -86,11 +86,17 @@ all =
       , test "shouldNotMatch" (
         "abc" |> shouldNotMatch (Regex.regex "[A-Z]+")
       )
-      , test "shouldBeDefined" (
-        (Just 1) |> shouldBeDefined
+      , test "shouldBeJust" (
+        (Just 1) |> shouldBeJust
       )
-      , test "shouldNotBeDefined" (
-        Nothing |> shouldNotBeDefined
+      , test "shouldBeNothing" (
+        Nothing |> shouldBeNothing
+      )
+      , test "shouldBeOk" (
+        (Ok 1) |> shouldBeOk
+      )
+      , test "shouldBeErr" (
+        (Err 1) |> shouldBeErr
       )
       , test "shouldContain" (
         [1, 2, 3] |> shouldContain 2
@@ -109,6 +115,12 @@ all =
       )
       , test "shouldBeGreaterThan" (
         2 |> shouldBeGreaterThan 1
+      )
+      , test "shouldPass" (
+        2 |> shouldPass (\v -> v > 1 && v < 3)
+      )
+      , test "shouldNotPass" (
+        2 |> shouldNotPass (\v -> v /= 2)
       )
       ]
     , describe "Task"

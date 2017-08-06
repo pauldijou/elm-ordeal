@@ -18,14 +18,18 @@ module Ordeal exposing
   , shouldNotEqual
   , shouldMatch
   , shouldNotMatch
-  , shouldBeDefined
-  , shouldNotBeDefined
+  , shouldBeNothing
+  , shouldBeJust
+  , shouldBeOk
+  , shouldBeErr
   , shouldContain
   , shouldNotContain
   , shouldBeOneOf
   , shouldNotBeOneOf
   , shouldBeLessThan
   , shouldBeGreaterThan
+  , shouldPass
+  , shouldNotPass
   , shouldSucceed
   , shouldSucceedWith
   , shouldFail
@@ -41,7 +45,7 @@ module Ordeal exposing
 @docs run, describe, xdescribe, test, xtest, andTest, andThen, success, failure, skipped, timeout, lazy
 
 # Writing expectations
-@docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeDefined, shouldNotBeDefined, shouldContain, shouldNotContain, shouldBeOneOf, shouldNotBeOneOf, shouldBeLessThan, shouldBeGreaterThan, shouldSucceed, shouldSucceedWith, shouldFail, shouldFailWith
+@docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeNothing, shouldBeJust, shouldBeOk, shouldBeErr, shouldContain, shouldNotContain, shouldBeOneOf, shouldNotBeOneOf, shouldBeLessThan, shouldBeGreaterThan, shouldPass, shouldNotPass, shouldSucceed, shouldSucceedWith, shouldFail, shouldFailWith
 -}
 
 import Time exposing (Time)
@@ -66,7 +70,7 @@ type TestResult
 
 type alias Expectation = Task String TestResult
 
-type Operator = Equal | Match | Contain | OneOf | Less | Greater
+type Operator = Equal | Match | Contain | OneOf | Less | Greater | Pass
 
 {-|-}
 describe: String -> List Test -> Test
@@ -146,6 +150,7 @@ operatorToString op no actual expected =
     OneOf -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to be one of " ++ (toString expected)
     Less -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to be less than " ++ (toString expected)
     Greater -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to be greater than " ++ (toString expected)
+    Pass -> "Expected " ++ (toString actual) ++ (if no then " not" else "") ++ " to pass the predicate"
 
 internalCompare: (Bool -> Bool) -> Operator -> (a -> b -> Bool) -> b -> a -> Expectation
 internalCompare inverse op predicate expected actual =
@@ -178,12 +183,26 @@ shouldNotMatch: Regex -> String -> Expectation
 shouldNotMatch = compareNot Match (flip Regex.contains)
 
 {-|-}
-shouldBeDefined: Maybe a -> Expectation
-shouldBeDefined = shouldNotEqual Nothing
+shouldBeNothing: Maybe a -> Expectation
+shouldBeNothing = shouldEqual Nothing
 
 {-|-}
-shouldNotBeDefined: Maybe a -> Expectation
-shouldNotBeDefined = shouldEqual Nothing
+shouldBeJust: Maybe a -> Expectation
+shouldBeJust = shouldNotEqual Nothing
+
+{-|-}
+shouldBeOk: Result e a -> Expectation
+shouldBeOk result =
+  case result of
+    Ok _ -> success
+    Err error -> failure <| "Expected an Ok but got: " ++ (toString error)
+
+{-|-}
+shouldBeErr: Result e a -> Expectation
+shouldBeErr result =
+  case result of
+    Err _ -> success
+    Ok value -> failure <| "Expected an Err but got:" ++ (toString value)
 
 {-|-}
 shouldContain: a -> List a -> Expectation
@@ -208,6 +227,14 @@ shouldBeLessThan = compare Less (<)
 {-|-}
 shouldBeGreaterThan: comparable -> comparable -> Expectation
 shouldBeGreaterThan = compare Greater (>)
+
+{-|-}
+shouldPass: (a -> Bool) -> a -> Expectation
+shouldPass = compare Pass (\value predicate -> predicate value)
+
+{-|-}
+shouldNotPass: (a -> Bool) -> a -> Expectation
+shouldNotPass = compareNot Pass (\value predicate -> predicate value)
 
 {-|-}
 shouldSucceed: Task a b -> Expectation
