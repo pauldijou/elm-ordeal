@@ -4,14 +4,15 @@ import Task
 import Process
 import Regex
 import Ordeal exposing (..)
+import Ordeal.Internals exposing (..)
 
 main: Ordeal
-main = run emit all
+main = run emit tests
 
 port emit : Event -> Cmd msg
 
-all: Test
-all =
+tests: Test
+tests =
   describe "My first suite"
     [ test "My very first test" (
       "a" |> shouldEqual "a"
@@ -42,34 +43,65 @@ all =
           if (value == 1) then success else failure "Should be 1"
         )
       )
-      , test "andThen" (
+      , test "and (success)" (
         success
-        |> andThen ("abc" |> shouldEqual "abc")
-        |> andThen (42    |> shouldEqual 42)
-        |> andThen (True  |> shouldEqual True)
-      )]
+        |> and ("abc" |> shouldEqual "abc")
+        |> and (42    |> shouldEqual 42)
+        |> and (True  |> shouldEqual True)
+      )
+      , testFailure "and (failure)" (
+        success
+        |> and ("abc" |> shouldEqual "abc")
+        |> and (42    |> shouldEqual 42)
+        |> and (True  |> shouldEqual False)
+      )
+      , test "or (success)" (
+        skipped
+        |> or timeout
+        |> or success
+        |> or (failure "")
+      )
+      , testFailure "or (failure)" (
+        skipped
+        |> or timeout
+        |> or (failure "")
+      )
+      , test "all (success)" (
+        all [ success, success, success ]
+      )
+      , testFailure "all (failure)" (
+        all [ success, failure "", success ]
+      )
+      , test "any (success)" (
+        any [ skipped, success, timeout, failure "" ]
+        |> and (any [])
+      )
+      , testSkipped "any (failure)" (
+        any [ timeout, failure "", skipped ]
+      )
+      ]
     , describe "Test results"
-      [ test "My first failure" (
+      [ testFailure "My first failure" (
         Task.fail { a = 1, b = "aze" } |> andTest (\value -> value |> shouldEqual "54")
       )
       , xtest "A skipped test" (
         "a" |> shouldEqual "b"
       )
-      , test "This test will timeout" (
+      , testTimeout "This test will timeout" (
         Process.sleep 100
-        |> Task.map (always 1)
+        |> Task.map (\_ -> 1)
         |> andTest (\value -> value |> shouldEqual 1)
       )
       , test "This is a success" (
         success
       )
-      , test "This is a failure" (
+      , testFailure "This is a failure" (
         failure "You failed"
       )
-      , test "This test will be skipped" (
+      , testSkipped "This test will be skipped" (
         skipped
       )
-      , test "This test will also timeout" (
+      , testTimeout "This test will also timeout" (
         timeout
       )
       ]
@@ -128,7 +160,7 @@ all =
         Task.succeed 1
         |> shouldSucceed
       )
-      , test "should succeed but will not" (
+      , testFailure "should succeed but will not" (
         Task.fail True
         |> shouldSucceed
       )
@@ -136,7 +168,7 @@ all =
         Task.succeed 1
         |> shouldSucceedWith 1
       )
-      , test "should succeed with True but will not" (
+      , testFailure "should succeed with True but will not" (
         Task.succeed False
         |> shouldSucceedWith True
       )
@@ -144,7 +176,7 @@ all =
         Task.fail "boom"
         |> shouldFail
       )
-      , test "should fail but will not" (
+      , testFailure "should fail but will not" (
         Task.succeed 4.2
         |> shouldFail
       )
@@ -152,7 +184,7 @@ all =
         Task.fail { a = 1, b = True}
         |> shouldFailWith { b = True, a = 1 }
       )
-      , test "should fail with 'a' but will not" (
+      , testFailure "should fail with 'a' but will not" (
         Task.fail "b"
         |> shouldFailWith "a"
       )

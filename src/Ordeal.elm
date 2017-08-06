@@ -8,7 +8,10 @@ module Ordeal exposing
   , test
   , xtest
   , andTest
-  , andThen
+  , and
+  , or
+  , all
+  , any
   , success
   , failure
   , skipped
@@ -42,7 +45,7 @@ module Ordeal exposing
 @docs Test, Event, Ordeal
 
 # Writing tests
-@docs run, describe, xdescribe, test, xtest, andTest, andThen, success, failure, skipped, timeout, lazy
+@docs run, describe, xdescribe, test, xtest, andTest, and, or, all, any, success, failure, skipped, timeout, lazy
 
 # Writing expectations
 @docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeNothing, shouldBeJust, shouldBeOk, shouldBeErr, shouldContain, shouldNotContain, shouldBeOneOf, shouldNotBeOneOf, shouldBeLessThan, shouldBeGreaterThan, shouldPass, shouldNotPass, shouldSucceed, shouldSucceedWith, shouldFail, shouldFailWith
@@ -56,19 +59,16 @@ import Json.Encode
 -- FIXME remove when issue is fixed https://github.com/elm-lang/elm-make/issues/134
 import Json.Decode
 
+import Ordeal.Types exposing (..)
+
 {-| A `Test` is something
 -}
-type Test
-  = Suite String (List Test) -- NEXT: Suite { name: String, only: Bool, tests: List Test }
-  | Test String Expectation -- NEXT: Test { name: String, only: Bool, hint: Maybe String, expectation: Expectation }
+type alias Test = Ordeal.Types.Test
 
-type TestResult
-  = Success
-  | Skipped
-  | Timeout
-  | Failure String
+type alias TestResult = Ordeal.Types.TestResult
 
-type alias Expectation = Task String TestResult
+type alias Expectation = Ordeal.Types.Expectation
+
 
 type Operator = Equal | Match | Contain | OneOf | Less | Greater | Pass
 
@@ -102,15 +102,48 @@ andTest spec task =
   |> Task.andThen spec
 
 {-|-}
-andThen: Expectation -> Expectation -> Expectation
-andThen second first =
+and: Expectation -> Expectation -> Expectation
+and second first =
   first
   |> Task.andThen (\result -> case result of
     Success -> second
-    Skipped -> skipped
+    Skipped -> second
     Timeout -> timeout
     Failure reason -> failure reason
   )
+
+{-|-}
+or: Expectation -> Expectation -> Expectation
+or second first =
+  first
+  |> Task.andThen (\result -> case result of
+    Success -> success
+    Skipped -> second
+    Timeout -> second
+    Failure reason -> second
+  )
+
+{-| First to fail is the final failure, ignoring all others -}
+all: List Expectation -> Expectation
+all =
+  List.foldl and success
+
+{-| We just want at least one Success -}
+any: List Expectation -> Expectation
+any expectations =
+  if List.isEmpty expectations
+  then success
+  else
+    Task.sequence expectations
+    |> Task.map (
+      List.foldl
+        (\testResult finalResult ->
+          if finalResult == Success || testResult == Success
+          then Success
+          else testResult
+        )
+        (Failure "We need at least one success")
+    )
 
 {-|-}
 success: Expectation
