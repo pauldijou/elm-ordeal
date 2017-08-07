@@ -43,28 +43,48 @@ tests =
           if (value == 1) then success else failure "Should be 1"
         )
       )
-      , test "and (success)" (
-        success
-        |> and ("abc" |> shouldEqual "abc")
-        |> and (42    |> shouldEqual 42)
-        |> and (True  |> shouldEqual True)
+      , test "and" (
+        all
+          [ success |> and success |> isSuccess
+          , success |> and skipped |> isSuccess
+          , success |> and timeout |> isTimeout
+          , success |> and (failure "") |> (isFailure "")
+          , skipped |> and success |> isSuccess
+          , skipped |> and skipped |> isSkipped
+          , skipped |> and timeout |> isTimeout
+          , skipped |> and (failure "") |> (isFailure "")
+          , timeout |> and success |> isTimeout
+          , timeout |> and skipped |> isTimeout
+          , timeout |> and timeout |> isTimeout
+          , timeout |> and (failure "") |> isTimeout
+          , (failure "") |> and success |> (isFailure "")
+          , (failure "") |> and skipped |> (isFailure "")
+          , (failure "") |> and timeout |> (isFailure "")
+          , (failure "a") |> and (failure "b") |> (isFailure "a")
+          ]
       )
-      , testFailure "and (failure)" (
-        success
-        |> and ("abc" |> shouldEqual "abc")
-        |> and (42    |> shouldEqual 42)
-        |> and (True  |> shouldEqual False)
+      , test "or" (
+        all
+          [ success |> or success |> isSuccess
+          , success |> or skipped |> isSuccess
+          , success |> or timeout |> isSuccess
+          , success |> or (failure "") |> isSuccess
+          , skipped |> or success |> isSuccess
+          , skipped |> or skipped |> isSkipped
+          , skipped |> or timeout |> isTimeout
+          , skipped |> or (failure "") |> (isFailure "")
+          , timeout |> or success |> isSuccess
+          , timeout |> or skipped |> isTimeout
+          , timeout |> or timeout |> isTimeout
+          , timeout |> or (failure "") |> (isFailure "")
+          , (failure "") |> or success |> isSuccess
+          , (failure "") |> or skipped |> (isFailure "")
+          , (failure "") |> or timeout |> isTimeout
+          , (failure "a") |> or (failure "b") |> (isFailure "b")
+          ]
       )
-      , test "or (success)" (
-        skipped
-        |> or timeout
-        |> or success
-        |> or (failure "")
-      )
-      , testFailure "or (failure)" (
-        skipped
-        |> or timeout
-        |> or (failure "")
+      , test "all (empty)" (
+        all []
       )
       , test "all (success)" (
         all [ success, success, success ]
@@ -72,11 +92,13 @@ tests =
       , testFailure "all (failure)" (
         all [ success, failure "", success ]
       )
+      , test "any (empty)" (
+        any []
+      )
       , test "any (success)" (
         any [ skipped, success, timeout, failure "" ]
-        |> and (any [])
       )
-      , testSkipped "any (failure)" (
+      , testFailure "any (failure)" (
         any [ timeout, failure "", skipped ]
       )
       ]

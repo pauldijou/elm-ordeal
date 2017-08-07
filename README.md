@@ -1,6 +1,6 @@
 # elm-ordeal
 
-> Write unit tests in Elm, support async Task out of the box
+> Write unit tests in Elm, support async Task out of the box, can run directly on Node or any major browsers.
 
 **Warning** This is still a work in progress, API will probably change a bit before 1.0 release.
 
@@ -41,10 +41,10 @@ tests =
       "a" |> shouldEqual "b"
     )
     , test "My first async test" (
-      Task.succeed 42 |> and (\value -> value |> shouldBeGreaterThan 35)
+      Task.succeed 42 |> andTest (\value -> value |> shouldBeGreaterThan 35)
     )
     , test "My first failure" (
-      Task.fail { a = 1, b = "aze" } |> and (\value -> value |> shouldEqual "54")
+      Task.fail { a = 1, b = "aze" } |> andTest (\value -> value |> shouldEqual "54")
     )
     , test "Another failure" (
       ["a","b","c"] |> shouldContain "d"
@@ -66,7 +66,7 @@ npm install --save-dev elm-ordeal
 yarn add --dev elm-ordeal
 
 # Run
-elm-ordeal your/TestFile.elm --node
+elm-ordeal your/TestFile.elm
 
 # Learn
 elm-ordeal --help
@@ -90,7 +90,7 @@ yarn test
 
 ### Envs
 
-You can run your tests on the following environments, just specify the correct CLI argument when running `elm-ordeal`. Don't forget it's up to you to locally install any browser you want to use.
+You can run your tests on the following environments, just specify the correct CLI argument when running `elm-ordeal`. Don't forget it's up to you to locally install any browser you want to use. If you don't provide any env, it will run as Node. You can specify several envs at once of course.
 
 - Node (`--node`)
 - Chrome (`--chrome`)
@@ -100,9 +100,35 @@ You can run your tests on the following environments, just specify the correct C
 - Opera (`--opera`)
 - Safari (`--safari`)
 
+## Combinators
+
+You can combine tests using `Ordeal.and` or `Ordeal.or`. Here is the result of combining two tests:
+
+⮳ and       | Success | Skipped | Timeout | Failure
+------------|---------|---------|---------|--------
+**Success** | Success | Success | Timeout | Failure
+**Skipped** | Success | Skipped | Timeout | Failure
+**Timeout** | Timeout | Timeout | Timeout | Timeout
+**Failure** | Failure | Failure | Failure | Failure
+
+⮳ or       | Success | Skipped | Timeout | Failure
+------------|---------|---------|---------|--------
+**Success** | Success | Success | Success | Success
+**Skipped** | Success | Skipped | Timeout | Failure
+**Timeout** | Success | Timeout | Timeout | Failure
+**Failure** | Success | Failure | Timeout | Failure
+
+In case of two `Failure`, `Ordeal.and` will return the first one while `Ordeal.or` will return the second one.
+
+You can also use `Ordeal.all` and `Ordeal.any` which works on list of tests just folding them using `Ordeal.and` and `Ordeal.or` respectively.
+
 ## Why? Why not just use elm-test?
 
 It's up to you, I think `elm-test` is good but when I started writing tests in Elm, I needed to test `Task` and there was no way to do it easily using `elm-test` (not sure if there is now). In `elm-ordeal`, all tests are tasks, so they can be can synchronous or asynchronous, the package does not care.
+
+## Test
+
+You can run the tests using `yarn install && yarn test`. Currently, the final result should be one timeout, one skipped and all other success.
 
 ## Thanks
 

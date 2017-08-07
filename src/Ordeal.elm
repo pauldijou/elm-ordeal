@@ -60,6 +60,7 @@ import Json.Encode
 import Json.Decode
 
 import Ordeal.Types exposing (..)
+import Ordeal.Internals exposing (andThenNever)
 
 {-| A `Test` is something
 -}
@@ -98,15 +99,22 @@ skip test =
 andTest: (a -> Expectation) -> Task e a -> Expectation
 andTest spec task =
   task
-  |> Task.mapError toString
-  |> Task.andThen spec
+  |> andThenNever
+    (Task.succeed << Failure << toString)
+    (spec)
 
 {-|-}
 and: Expectation -> Expectation -> Expectation
 and second first =
   first
   |> Task.andThen (\result -> case result of
-    Success -> second
+    Success ->
+      second
+      |> Task.map (\result2 ->
+        if result2 == Skipped
+        then Success
+        else result2
+      )
     Skipped -> second
     Timeout -> timeout
     Failure reason -> failure reason
@@ -119,8 +127,13 @@ or second first =
   |> Task.andThen (\result -> case result of
     Success -> success
     Skipped -> second
-    Timeout -> second
-    Failure reason -> second
+    _ ->
+      second
+      |> Task.map (\result2 ->
+        if result2 == Skipped
+        then result
+        else result2
+      )
   )
 
 {-| First to fail is the final failure, ignoring all others -}
@@ -128,22 +141,12 @@ all: List Expectation -> Expectation
 all =
   List.foldl and success
 
-{-| We just want at least one Success -}
+{-| We just want at least one Success, otherwise return last timeout or failure -}
 any: List Expectation -> Expectation
 any expectations =
   if List.isEmpty expectations
   then success
-  else
-    Task.sequence expectations
-    |> Task.map (
-      List.foldl
-        (\testResult finalResult ->
-          if finalResult == Success || testResult == Success
-          then Success
-          else testResult
-        )
-        (Failure "We need at least one success")
-    )
+  else List.foldl or (failure "We need at least one success") expectations
 
 {-|-}
 success: Expectation
@@ -270,32 +273,42 @@ shouldNotPass: (a -> Bool) -> a -> Expectation
 shouldNotPass = compareNot Pass (\value predicate -> predicate value)
 
 {-|-}
-shouldSucceed: Task a b -> Expectation
+shouldSucceed: Task err res -> Expectation
 shouldSucceed task =
   task
   |> Task.map (\success -> Success)
-  |> Task.onError(\err -> Task.succeed <| Failure <| "Task was supposed to succeed but failed with: " ++ (toString err))
+  |> Task.onError(\err ->
+    "Task was supposed to succeed but failed with: " ++ (toString err)
+    |> Failure
+    |> Task.succeed
+  )
 
 {-|-}
-shouldSucceedWith: b -> Task a b -> Expectation
+shouldSucceedWith: res -> Task err res -> Expectation
 shouldSucceedWith result task =
   task
-  |> Task.mapError toString
-  |> Task.andThen (shouldEqual result)
-  |> Task.onError(\err -> Task.succeed <| Failure <| "Task was supposed to succeed but failed with: " ++ err)
+  |> andThenNever
+    (Task.succeed << Failure << toString)
+    (shouldEqual result)
 
 {-|-}
-shouldFail: Task a b -> Expectation
+shouldFail: Task err res -> Expectation
 shouldFail task =
   task
-  |> Task.map (\success -> Failure <| "Task was supposed to failed but succeed with: " ++ (toString success))
+  |> Task.map (\success ->
+    "Task was supposed to failed but succeed with: " ++ (toString success)
+    |> Failure
+  )
   |> Task.onError(\_ -> Task.succeed Success)
 
 {-|-}
-shouldFailWith: a -> Task a b -> Expectation
+shouldFailWith: err -> Task err res -> Expectation
 shouldFailWith error task =
   task
-  |> Task.map (\success -> Failure <| "Task was supposed to failed but succeed with: " ++ (toString success))
+  |> Task.map (\success ->
+    "Task was supposed to failed but succeed with: " ++ (toString success)
+    |> Failure
+  )
   |> Task.onError(shouldEqual error)
 
 -- Runner
@@ -402,18 +415,8 @@ update emitter msg model =
             TestRun nextTest ->
               updatedModel ! [
                 testStarted emitter nextTest.name,
-                Task.attempt
-                  (\taskResult -> case taskResult of
-                    Ok res -> RunnedTest nextTest res
-                    Err (err, start, end) -> RunnedTest nextTest (Failure err, start, end)
-                  )
-                  (wrap nextTest.expectation),
-                Task.attempt
-                  (\taskResult -> case taskResult of
-                    Ok res -> RunnedTest nextTest res
-                    Err (err, start, end) -> RunnedTest nextTest (Failure err, start, end)
-                  )
-                  (wrap <| timeoutIn model.timeout)
+                Task.perform (RunnedTest nextTest) (wrap nextTest.expectation),
+                Task.perform (RunnedTest nextTest) (wrap <| timeoutIn model.timeout)
               ]
 
     RunnedTest value (result, start, end) ->
@@ -454,23 +457,17 @@ timeoutIn duration =
   Process.spawn (Task.succeed ())
   |> Task.andThen (\_ -> Process.sleep duration)
   |> Task.map (\_ -> Timeout)
-  |> Task.mapError (\_ -> "")
 
-wrap: Expectation -> Task (String, Time, Time) (TestResult, Time, Time)
+wrap: Expectation -> Task Never (TestResult, Time, Time)
 wrap expectation =
   Time.now
   |> Task.andThen (\start ->
     expectation
     |> Task.map (\res -> (res, start))
-    |> Task.mapError (\err -> (err, start))
   )
   |> Task.andThen (\(result, start) ->
     Time.now
     |> Task.map (\end -> (result, start, end))
-  )
-  |> Task.onError (\(result, start) ->
-    Time.now
-    |> Task.andThen (\end -> Task.fail (result, start, end))
   )
 
 initReport: TestId -> Test -> (TestId, Report, Queue)

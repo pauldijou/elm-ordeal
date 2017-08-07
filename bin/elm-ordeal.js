@@ -27,8 +27,8 @@ var args = require('minimist')(process.argv.slice(2), {
     json: 'j',
     keep: 'k'
   },
-  boolean: [ 'help', 'version', 'keep', 'hard-keep', 'json', 'node', 'chrome', 'edge', 'firefox', 'safari', 'ie', 'opera' ],
-  string: [ 'compiler', 'timeout', 'port' ],
+  boolean: [ 'help', 'version', 'keep', 'hardKeep', 'json', 'node', 'chrome', 'edge', 'firefox', 'safari', 'ie', 'opera' ],
+  string: [ 'compiler', 'timeout', 'port', 'outputFile' ],
   default: {
     timeout: '' + defaults.timeout
   }
@@ -53,7 +53,8 @@ if (args.help) {
   console.log('    -j, --json', ' export result as a JSON string')
   console.log('    -p, --port', ' the name of the Elm port to use from your main test program')
   console.log('    -k, --keep', ' keep the last generated JS file so you can debug it')
-  console.log('    --hard-keep', ' keep all generated JS file so you can debug them')
+  console.log('    --hardKeep', ' keep all generated JS file so you can debug them')
+  // console.log('    --outputFile', ' keep all generated JS file so you can debug them') // TODO
   console.log('')
   console.log('  Envs (browsers must already be installed):')
   console.log('')
@@ -69,8 +70,8 @@ if (args.help) {
 }
 
 var cwd = process.cwd()
-var cleanAtStart = !args['hard-keep']
-var cleanAtEnd = !(args['hard-keep'] || args.keep)
+var cleanAtStart = !args.hardKeep
+var cleanAtEnd = !(args.hardKeep || args.keep)
 
 
 var testFile = args._[0]
