@@ -10,6 +10,8 @@ module Ordeal exposing
   , test
   , xtest
   , andTest
+  , andThen
+  , andTask
   , and
   , or
   , all
@@ -47,7 +49,7 @@ module Ordeal exposing
 @docs Test, TestResult, Expectation, Event, Ordeal
 
 # Writing tests
-@docs run, describe, xdescribe, test, xtest, andTest, and, or, all, any, success, failure, skipped, timeout, lazy
+@docs run, describe, xdescribe, test, xtest, andTest, andThen, andTask, and, or, all, any, success, failure, skipped, timeout, lazy
 
 # Writing expectations
 @docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeNothing, shouldBeJust, shouldBeOk, shouldBeErr, shouldContain, shouldNotContain, shouldBeOneOf, shouldNotBeOneOf, shouldBeLessThan, shouldBeGreaterThan, shouldPass, shouldNotPass, shouldSucceed, shouldSucceedWith, shouldFail, shouldFailWith
@@ -100,11 +102,26 @@ skip test =
 
 {-|-}
 andTest: (a -> Expectation) -> Task e a -> Expectation
-andTest spec task =
-  task
-  |> andThenBoth
-    (Task.succeed << Failure << toString)
-    (spec)
+andTest spec =
+  andThenBoth (toString >> Failure >> Task.succeed) (spec)
+
+{-|-}
+andThen: (() -> Expectation) -> Expectation -> Expectation
+andThen spec =
+  and (lazy spec)
+
+{-|
+Execute a Task after running the test. This will not change the test result.
+Usefull for closing / releasing resources and stuff like that.
+-}
+andTask: (TestResult -> Task e a) -> Expectation -> Expectation
+andTask next expectation =
+  expectation
+  |> Task.andThen (\result ->
+    next result
+    |> Task.map (\_ -> result)
+    |> Task.onError (\_ -> Task.succeed result)
+  )
 
 {-|-}
 and: Expectation -> Expectation -> Expectation

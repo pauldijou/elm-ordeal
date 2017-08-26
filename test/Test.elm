@@ -43,6 +43,12 @@ tests =
           if (value == 1) then success else failure "Should be 1"
         )
       )
+      , test "andThen" (
+        all
+          [ success |> andThen (\_ -> failure "") |> (isFailure "")
+          , success |> andThen (\_ -> success) |> isSuccess
+          ]
+      )
       , test "and" (
         all
           [ success |> and success |> isSuccess
