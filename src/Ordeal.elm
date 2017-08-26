@@ -1,5 +1,7 @@
 module Ordeal exposing
   ( Test
+  , TestResult
+  , Expectation
   , Event
   , Ordeal
   , run
@@ -42,7 +44,7 @@ module Ordeal exposing
 {-| An `Ordeal` is a trial to see if your code is good enough to reach the production heaven or not.
 
 # Type and Constructors
-@docs Test, Event, Ordeal
+@docs Test, TestResult, Expectation, Event, Ordeal
 
 # Writing tests
 @docs run, describe, xdescribe, test, xtest, andTest, and, or, all, any, success, failure, skipped, timeout, lazy
@@ -60,14 +62,15 @@ import Json.Encode
 import Json.Decode
 
 import Ordeal.Types exposing (..)
-import Ordeal.Internals exposing (andThenNever)
+import Ordeal.Internals exposing (andThenBoth)
 
-{-| A `Test` is something
--}
+{-| A `Test` is just a name and an expectation -}
 type alias Test = Ordeal.Types.Test
 
+{-| A `TestResult` can be a Success, a Skipped test, a Timeout or a Failure -}
 type alias TestResult = Ordeal.Types.TestResult
 
+{-| An `Expectation` is just an alias for `Task Never TestResult` which means, at some point in the future, it will give us a result for the test (for sure) -}
 type alias Expectation = Ordeal.Types.Expectation
 
 
@@ -99,7 +102,7 @@ skip test =
 andTest: (a -> Expectation) -> Task e a -> Expectation
 andTest spec task =
   task
-  |> andThenNever
+  |> andThenBoth
     (Task.succeed << Failure << toString)
     (spec)
 
@@ -287,7 +290,7 @@ shouldSucceed task =
 shouldSucceedWith: res -> Task err res -> Expectation
 shouldSucceedWith result task =
   task
-  |> andThenNever
+  |> andThenBoth
     (Task.succeed << Failure << toString)
     (shouldEqual result)
 

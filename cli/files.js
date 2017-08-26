@@ -13,9 +13,13 @@ function prependZero(value) {
   return value
 }
 
+function getOutputDir(ctx) {
+  return ctx.args.outputDir || tmpDir
+}
+
 function generateTmpPath(ctx) {
   var now = new Date()
-  var name = [
+  var name = ctx.args.outputFile || [
     tmpFilePrefix,
     now.getFullYear(), '-', prependZero(now.getMonth() + 1), '-', prependZero(now.getDate()),
     '_',
@@ -27,7 +31,7 @@ function generateTmpPath(ctx) {
     tmpFileSuffix
   ].join('')
 
-  return path.join(tmpDir, name)
+  return path.resolve(getOutputDir(ctx), name)
 }
 
 function exists(filename) {
@@ -65,13 +69,15 @@ function create(ctx) {
 
 function list(ctx) {
   return new Promise(function (resolve, reject) {
-    fs.readdir(tmpDir, function (err, files) {
+    const outputDir = getOutputDir(ctx)
+
+    fs.readdir(outputDir, function (err, files) {
       if (err) { return reject(err) }
 
       var ordealFiles = (files || []).filter(function (filePath) {
         return filePath.indexOf(tmpFilePrefix) === 0
       }).map(function (filePath) {
-        return path.join(tmpDir, filePath)
+        return path.join(outputDir, filePath)
       })
 
       resolve(ordealFiles)
@@ -98,14 +104,14 @@ function check(ctx) {
         ' ',
         symbols.warning,
         chalk.yellow(chalk.bold(files.length + ' file' + (files.length > 1 ? 's' : ''))
-        + ' in your tmp directory.')
+        + ' in your output directory.')
       )
       console.log('')
       files.forEach(function (filePath) {
         console.log(' ', ' -', filePath)
       })
     } else {
-      console.log(' ', symbols.info, 'All temporary files have been removed.')
+      console.log(' ', symbols.info, 'All known temporary files have been removed.')
     }
     console.log('')
 

@@ -28,7 +28,7 @@ var args = require('minimist')(process.argv.slice(2), {
     keep: 'k'
   },
   boolean: [ 'help', 'version', 'keep', 'hardKeep', 'json', 'node', 'chrome', 'edge', 'firefox', 'safari', 'ie', 'opera' ],
-  string: [ 'compiler', 'timeout', 'port', 'outputFile' ],
+  string: [ 'compiler', 'timeout', 'port', 'outputDir', 'outputFile' ],
   default: {
     timeout: '' + defaults.timeout
   }
@@ -54,7 +54,8 @@ if (args.help) {
   console.log('    -p, --port', ' the name of the Elm port to use from your main test program')
   console.log('    -k, --keep', ' keep the last generated JS file so you can debug it')
   console.log('    --hardKeep', ' keep all generated JS file so you can debug them')
-  // console.log('    --outputFile', ' keep all generated JS file so you can debug them') // TODO
+  console.log('    --outputDir', ' where JS files are generated, default to tmp dir')
+  console.log('    --outputFile', ' the name of the generated JS file')
   console.log('')
   console.log('  Envs (browsers must already be installed):')
   console.log('')
@@ -121,6 +122,7 @@ function doNothing(ctx) { return ctx }
 // -----------------------------------------------------------------------------
 // The trial by ordeal
 Promise.resolve({
+    args: args,
     sources: [ testFile ],
     silent: false,
     node: undefined,

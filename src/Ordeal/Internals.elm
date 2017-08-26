@@ -22,10 +22,11 @@ mapBoth onFailure onSuccess task =
   |> Task.map onSuccess
   |> Task.mapError onFailure
 
-andThenNever: (err -> Task Never nextRes) -> (res -> Task Never nextRes) -> Task err res -> Task Never nextRes
-andThenNever onFailure onSuccess task =
+andThenBoth: (err -> Task nextErr nextRes) -> (res -> Task nextErr nextRes) -> Task err res -> Task nextErr nextRes
+andThenBoth onFailure onSuccess task =
   task
-  |> toResult
+  |> Task.map Ok
+  |> Task.onError (Task.succeed << Err)
   |> Task.andThen (\result -> case result of
     Ok success -> onSuccess success
     Err failure -> onFailure failure
