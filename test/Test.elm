@@ -26,12 +26,12 @@ tests =
       )
       ]
     , test "My first async test" (
-      Task.succeed 42 |> andTest (\value -> value |> shouldBeGreaterThan 35)
+      Task.succeed 42 |> shouldSucceedAnd (\value -> value |> shouldBeGreaterThan 35)
     )
     , test "This test will take nearly 10ms" (
       Process.sleep 10
       |> Task.map (always 1)
-      |> andTest (\value -> value |> shouldEqual 1)
+      |> shouldSucceedAnd (\value -> value |> shouldEqual 1)
     )
     , describe "Helpers"
       [ test "This test is lazy" (
@@ -39,8 +39,10 @@ tests =
       )
       , test "andTest" (
         Task.succeed 1
-        |> andTest (\value ->
-          if (value == 1) then success else failure "Should be 1"
+        |> andTest (\res -> case res of
+          Ok 1 -> success
+          Ok _ -> failure "Should be 1"
+          Err _ -> failure "Should be ok"
         )
       )
       , test "andThen" (
@@ -110,7 +112,7 @@ tests =
       ]
     , describe "Test results"
       [ testFailure "My first failure" (
-        Task.fail { a = 1, b = "aze" } |> andTest (\value -> value |> shouldEqual "54")
+        Task.fail { a = 1, b = "aze" } |> shouldSucceedAnd (\value -> value |> shouldEqual "54")
       )
       , xtest "A skipped test" (
         "a" |> shouldEqual "b"
@@ -118,7 +120,7 @@ tests =
       , testTimeout "This test will timeout" (
         Process.sleep 100
         |> Task.map (\_ -> 1)
-        |> andTest (\value -> value |> shouldEqual 1)
+        |> shouldSucceedAnd (\value -> value |> shouldEqual 1)
       )
       , test "This is a success" (
         success

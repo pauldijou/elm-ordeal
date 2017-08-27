@@ -11,7 +11,7 @@ module Ordeal exposing
   , xtest
   , andTest
   , andThen
-  , andTask
+  , andAside
   , and
   , or
   , all
@@ -39,8 +39,10 @@ module Ordeal exposing
   , shouldNotPass
   , shouldSucceed
   , shouldSucceedWith
+  , shouldSucceedAnd
   , shouldFail
   , shouldFailWith
+  , shouldFailAnd
   )
 
 {-| An `Ordeal` is a trial to see if your code is good enough to reach the production heaven or not.
@@ -49,10 +51,10 @@ module Ordeal exposing
 @docs Test, TestResult, Expectation, Event, Ordeal
 
 # Writing tests
-@docs run, describe, xdescribe, test, xtest, andTest, andThen, andTask, and, or, all, any, success, failure, skipped, timeout, lazy
+@docs run, describe, xdescribe, test, xtest, andTest, andThen, andAside, and, or, all, any, success, failure, skipped, timeout, lazy
 
 # Writing expectations
-@docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeNothing, shouldBeJust, shouldBeOk, shouldBeErr, shouldContain, shouldNotContain, shouldBeOneOf, shouldNotBeOneOf, shouldBeLessThan, shouldBeGreaterThan, shouldPass, shouldNotPass, shouldSucceed, shouldSucceedWith, shouldFail, shouldFailWith
+@docs shouldEqual, shouldNotEqual, shouldMatch, shouldNotMatch, shouldBeNothing, shouldBeJust, shouldBeOk, shouldBeErr, shouldContain, shouldNotContain, shouldBeOneOf, shouldNotBeOneOf, shouldBeLessThan, shouldBeGreaterThan, shouldPass, shouldNotPass, shouldSucceed, shouldSucceedWith, shouldSucceedAnd, shouldFail, shouldFailWith, shouldFailAnd
 -}
 
 import Time exposing (Time)
@@ -64,7 +66,7 @@ import Json.Encode
 import Json.Decode
 
 import Ordeal.Types exposing (..)
-import Ordeal.Internals exposing (andThenBoth)
+import Ordeal.Internals as Internals
 
 {-| A `Test` is just a name and an expectation -}
 type alias Test = Ordeal.Types.Test
@@ -101,9 +103,10 @@ skip test =
     Test name expectation -> Test name (Task.succeed Skipped)
 
 {-|-}
-andTest: (a -> Expectation) -> Task e a -> Expectation
+andTest: (Result e a -> Expectation) -> Task e a -> Expectation
 andTest spec =
-  andThenBoth (toString >> Failure >> Task.succeed) (spec)
+  Internals.toResult >> (Task.andThen spec)
+  -- andThenBoth (toString >> Failure >> Task.succeed) (spec)
 
 {-|-}
 andThen: (() -> Expectation) -> Expectation -> Expectation
@@ -114,8 +117,8 @@ andThen spec =
 Execute a Task after running the test. This will not change the test result.
 Usefull for closing / releasing resources and stuff like that.
 -}
-andTask: (TestResult -> Task e a) -> Expectation -> Expectation
-andTask next expectation =
+andAside: (TestResult -> Task e a) -> Expectation -> Expectation
+andAside next expectation =
   expectation
   |> Task.andThen (\result ->
     next result
@@ -296,40 +299,58 @@ shouldNotPass = compareNot Pass (\value predicate -> predicate value)
 shouldSucceed: Task err res -> Expectation
 shouldSucceed task =
   task
-  |> Task.map (\success -> Success)
+  |> Task.map (\_ -> Success)
   |> Task.onError(\err ->
     "Task was supposed to succeed but failed with: " ++ (toString err)
-    |> Failure
-    |> Task.succeed
+    |> failure
   )
 
 {-|-}
 shouldSucceedWith: res -> Task err res -> Expectation
-shouldSucceedWith result task =
-  task
-  |> andThenBoth
-    (Task.succeed << Failure << toString)
-    (shouldEqual result)
+shouldSucceedWith result =
+  Internals.andThenBoth (failure << toString) (shouldEqual result)
+
+{-|-}
+shouldSucceedAnd: (res -> Expectation) -> Task err res -> Expectation
+shouldSucceedAnd spec =
+  andTest (\res -> case res of
+    Ok value ->
+      spec value
+    Err err ->
+      "Task was supposed to succeed but failed with: " ++ (toString err)
+      |> failure
+  )
 
 {-|-}
 shouldFail: Task err res -> Expectation
 shouldFail task =
   task
-  |> Task.map (\success ->
-    "Task was supposed to failed but succeed with: " ++ (toString success)
+  |> Task.map (\res ->
+    "Task was supposed to fail but succeed with: " ++ (toString res)
     |> Failure
   )
-  |> Task.onError(\_ -> Task.succeed Success)
+  |> Task.onError (\_ -> success)
 
 {-|-}
 shouldFailWith: err -> Task err res -> Expectation
 shouldFailWith error task =
   task
-  |> Task.map (\success ->
-    "Task was supposed to failed but succeed with: " ++ (toString success)
+  |> Task.map (\res ->
+    "Task was supposed to fail but succeeded with: " ++ (toString res)
     |> Failure
   )
-  |> Task.onError(shouldEqual error)
+  |> Task.onError (shouldEqual error)
+
+{-|-}
+shouldFailAnd: (err -> Expectation) -> Task err res -> Expectation
+shouldFailAnd spec =
+  andTest (\res -> case res of
+    Err err ->
+      spec err
+    Ok res ->
+      "Task was supposed to fail but succeeded with: " ++ (toString res)
+      |> failure
+  )
 
 -- Runner
 
