@@ -18,7 +18,7 @@ port module Test exposing (..)
 import Task
 import Ordeal exposing (..)
 
-main: OrdealProgram
+main: Ordeal
 main = run emit tests
 
 port emit : Event -> Cmd msg
@@ -41,10 +41,26 @@ tests =
       "a" |> shouldEqual "b"
     )
     , test "My first async test" (
-      Task.succeed 42 |> andTest (\value -> value |> shouldBeGreaterThan 35)
+      Task.succeed 42 
+        |> andTest (\result ->
+            case result of 
+                Ok value ->
+                    value |> shouldBeGreaterThan 35
+                
+                Err str ->
+                    failure str
+        )
     )
     , test "My first failure" (
-      Task.fail { a = 1, b = "aze" } |> andTest (\value -> value |> shouldEqual "54")
+      Task.fail { a = 1, b = "aze" } 
+        |> andTest (\result -> 
+            case result of 
+                Ok _ -> 
+                    failure "some hanlder"
+                
+                Err {a, b} ->
+                    shouldEqual "54" b
+        )
     )
     , test "Another failure" (
       ["a","b","c"] |> shouldContain "d"
